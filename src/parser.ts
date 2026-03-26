@@ -54,7 +54,7 @@ type ParsedItem = {
 type InternalGateDef = {
   name: string;
   params: string[];
-  type: "macro" | "blackbox";
+  type: "macro" | "blackbox" | "cgate";
   body?: TempOp[];
 };
 
@@ -98,12 +98,10 @@ function tokenize(source: string): ChunkToken[] {
     const ch = source[i];
 
     if (ch === "#") {
-      while (i < source.length && source[i] !== "\n") {
+      while (i + 1 < source.length && source[i + 1] !== "\n") {
         i += 1;
       }
-      if (i >= source.length) {
-        break;
-      }
+      continue;
     }
 
     if (ch === "\r") {
@@ -257,12 +255,23 @@ function parseIdentifierList(raw: string, line: number): string[] {
 }
 
 function parseGateDefinition(statement: string, line: number): InternalGateDef {
-  const match = statement.match(/^GATE\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)\s*(?:=\s*(.*))?$/i);
-  if (!match) {
+  const cgateMatch = statement.match(/^CGATE\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)\s*$/i);
+  if (cgateMatch) {
+    const [, rawName, rawParams] = cgateMatch;
+    const name = rawName.toUpperCase();
+    const params = parseIdentifierList(rawParams, line);
+    if (params.length !== 2) {
+      throw new Error(`Line ${line}: CGATE ${name} expects exactly 2 parameters.`);
+    }
+    return { name, params, type: "cgate" };
+  }
+
+  const gateMatch = statement.match(/^GATE\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)\s*(?:=\s*(.*))?$/i);
+  if (!gateMatch) {
     throw new Error(`Line ${line}: invalid gate definition syntax.`);
   }
 
-  const [, rawName, rawParams, rawBody] = match;
+  const [, rawName, rawParams, rawBody] = gateMatch;
   const name = rawName.toUpperCase();
   const params = parseIdentifierList(rawParams, line);
 
@@ -426,7 +435,7 @@ function buildPhases(
           continue;
         }
         const producerPhase = opToPhase.get(producerOp);
-        if (producerPhase === undefined || producerPhase > phaseIndex) {
+        if (producerPhase === undefined || producerPhase >= phaseIndex) {
           hasClassicalConflict = true;
           break;
         }
@@ -516,7 +525,7 @@ export function parseCircuitDsl(source: string): CircuitAst {
       continue;
     }
 
-    if (/^gate\b/i.test(statement)) {
+    if (/^(gate|cgate)\b/i.test(statement)) {
       if (inBraces || commaGroupId !== undefined) {
         throw new Error(`Line ${token.line}: gate definition cannot appear inside an operation group.`);
       }
@@ -667,6 +676,7 @@ export function parseCircuitDsl(source: string): CircuitAst {
 
   const resolvedOps: Array<{ op: CircuitOp; line: number; explicitGroupId?: number }> = [];
   const declaredClassicalBits = new Set<string>();
+  const macroExpansions: Array<{ name: string; startOpIndex: number; endOpIndex: number }> = [];
   const macroStack: string[] = [];
 
   const expandMacro = (
@@ -765,7 +775,7 @@ export function parseCircuitDsl(source: string): CircuitAst {
           conditional: effectiveConditional
         };
 
-        if (nested.type === "blackbox") {
+        if (nested.type === "blackbox" || nested.type === "cgate") {
           resolvedOps.push({
             line: callLine,
             explicitGroupId,
@@ -775,7 +785,8 @@ export function parseCircuitDsl(source: string): CircuitAst {
               targets: nestedCall.targetRefs.map((ref) => resolveQubitRef(ref, aliasByName, resolvedQubits, callLine)),
               params: nestedCall.params,
               conditional: nestedCall.conditional,
-              isCustom: true
+              isCustom: true,
+              isControlledCustom: nested.type === "cgate"
             }
           });
         } else {
@@ -822,7 +833,7 @@ export function parseCircuitDsl(source: string): CircuitAst {
         );
       }
 
-      if (custom.type === "blackbox") {
+      if (custom.type === "blackbox" || custom.type === "cgate") {
         const targets = op.targetRefs.map((ref) =>
           resolveQubitRef(ref, aliasByName, resolvedQubits, item.line)
         );
@@ -835,11 +846,21 @@ export function parseCircuitDsl(source: string): CircuitAst {
             targets,
             params: op.params,
             conditional: op.conditional,
-            isCustom: true
+            isCustom: true,
+            isControlledCustom: custom.type === "cgate"
           }
         });
       } else {
+        const startOpIndex = resolvedOps.length;
         expandMacro(custom, op, item.line, item.explicitGroupId);
+        const endOpIndex = resolvedOps.length - 1;
+        if (endOpIndex >= startOpIndex) {
+          macroExpansions.push({
+            name: custom.name,
+            startOpIndex,
+            endOpIndex
+          });
+        }
       }
       continue;
     }
@@ -887,6 +908,10 @@ export function parseCircuitDsl(source: string): CircuitAst {
       });
     });
     ast.gateDefs = defs;
+  }
+
+  if (macroExpansions.length > 0) {
+    ast.macroExpansions = macroExpansions;
   }
 
   return ast;

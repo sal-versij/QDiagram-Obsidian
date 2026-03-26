@@ -5,6 +5,7 @@ export type GateOp = {
   params?: string[];
   conditional?: string;
   isCustom?: boolean;
+  isControlledCustom?: boolean;
 };
 
 export type MeasureOp = {
@@ -23,7 +24,7 @@ export type CircuitOp = GateOp | MeasureOp | ResetOp;
 export type Phase = CircuitOp[];
 
 export type GateDef = {
-  type: "macro" | "blackbox";
+  type: "macro" | "blackbox" | "cgate";
   params: string[];
   body?: Phase[];
   metadata?: {
@@ -31,10 +32,17 @@ export type GateDef = {
   };
 };
 
+export type MacroExpansion = {
+  name: string;
+  startOpIndex: number;
+  endOpIndex: number;
+};
+
 export type CircuitAst = {
   qubits: number;
   qubitAliases?: Map<number, string>;
   gateDefs?: Map<string, GateDef>;
+  macroExpansions?: MacroExpansion[];
   phases: Phase[];
   ops: CircuitOp[];
 };
