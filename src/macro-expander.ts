@@ -1,5 +1,6 @@
 import { BUILTIN_GATES } from "./gate-registry";
 import { CircuitOp } from "./types";
+import { formatQubitTargetCount } from "./error-format";
 
 export type MacroBodyGateOp = {
   kind: "gate";
@@ -171,7 +172,7 @@ export function expandMacroCall(args: {
       }
       if (expandedTargets.length !== nested.params.length) {
         throw new Error(
-          `Line ${callLine}: gate ${nested.name} expects ${nested.params.length} qubit targets.`
+          `Line ${callLine}: gate ${nested.name} expects ${formatQubitTargetCount(nested.params.length, "number")}.`
         );
       }
 

@@ -1,6 +1,9 @@
 import { customGateWidth, Layout, wireY } from "./circuit-layout";
 import { CircuitOp, GateOp } from "./types";
 
+export type GateRenderHandler = (op: GateOp, phaseCenterX: number, layout: Layout) => string;
+export type GateRenderRegistry = Partial<Record<string, GateRenderHandler>>;
+
 function esc(text: string): string {
   return text
     .replace(/&/g, "&amp;")
@@ -127,56 +130,68 @@ function renderReset(target: number, x: number, layout: Layout): string {
   ].join("");
 }
 
-export function renderOperation(op: CircuitOp, phaseCenterX: number, layout: Layout): string {
-  if (op.type === "measure") {
-    return renderMeasure(op.target, phaseCenterX, layout);
-  }
-  if (op.type === "reset") {
-    return renderReset(op.target, phaseCenterX, layout);
-  }
-
-  if (op.isControlledCustom) {
-    return renderControlledCustom(op, phaseCenterX, layout);
-  }
-
-  if (op.isCustom) {
-    return renderCustomGate(op, phaseCenterX, layout);
-  }
-
-  if (op.targets.length === 1) {
-    return renderSingleGate(op, phaseCenterX, wireY(op.targets[0], layout), layout);
-  }
-
-  if (op.name === "CNOT" || op.name === "CX" || op.name === "CZ") {
-    return renderControlled(op, phaseCenterX, layout);
-  }
-
-  if (op.name === "SWAP") {
-    return renderSwap(op, phaseCenterX, layout);
-  }
-
-  if (op.name === "TOFFOLI" || op.name === "CCX") {
-    const [c1, c2, target] = op.targets;
-    const y1 = wireY(c1, layout);
-    const y2 = wireY(c2, layout);
-    const y3 = wireY(target, layout);
-    const top = Math.min(y1, y2, y3);
-    const bottom = Math.max(y1, y2, y3);
-    return [
-      `<line x1="${phaseCenterX}" y1="${top}" x2="${phaseCenterX}" y2="${bottom}" stroke="var(--text-normal)" />`,
-      `<circle cx="${phaseCenterX}" cy="${y1}" r="5" fill="var(--text-normal)" />`,
-      `<circle cx="${phaseCenterX}" cy="${y2}" r="5" fill="var(--text-normal)" />`,
-      `<circle cx="${phaseCenterX}" cy="${y3}" r="10" fill="none" stroke="var(--text-normal)" />`,
-      `<line x1="${phaseCenterX - 8}" y1="${y3}" x2="${phaseCenterX + 8}" y2="${y3}" stroke="var(--text-normal)" />`,
-      `<line x1="${phaseCenterX}" y1="${y3 - 8}" x2="${phaseCenterX}" y2="${y3 + 8}" stroke="var(--text-normal)" />`
-    ].join("");
-  }
-
-  // Fallback for unsupported multi-qubit gates.
-  return renderSingleGate(
-    { type: "gate", name: op.name, targets: [op.targets[0]], params: op.params },
-    phaseCenterX,
-    wireY(op.targets[0], layout),
-    layout
-  );
+function renderToffoliFamily(op: GateOp, phaseCenterX: number, layout: Layout): string {
+  const [c1, c2, target] = op.targets;
+  const y1 = wireY(c1, layout);
+  const y2 = wireY(c2, layout);
+  const y3 = wireY(target, layout);
+  const top = Math.min(y1, y2, y3);
+  const bottom = Math.max(y1, y2, y3);
+  return [
+    `<line x1="${phaseCenterX}" y1="${top}" x2="${phaseCenterX}" y2="${bottom}" stroke="var(--text-normal)" />`,
+    `<circle cx="${phaseCenterX}" cy="${y1}" r="5" fill="var(--text-normal)" />`,
+    `<circle cx="${phaseCenterX}" cy="${y2}" r="5" fill="var(--text-normal)" />`,
+    `<circle cx="${phaseCenterX}" cy="${y3}" r="10" fill="none" stroke="var(--text-normal)" />`,
+    `<line x1="${phaseCenterX - 8}" y1="${y3}" x2="${phaseCenterX + 8}" y2="${y3}" stroke="var(--text-normal)" />`,
+    `<line x1="${phaseCenterX}" y1="${y3 - 8}" x2="${phaseCenterX}" y2="${y3 + 8}" stroke="var(--text-normal)" />`
+  ].join("");
 }
+
+const DEFAULT_GATE_RENDERERS: Record<string, GateRenderHandler> = {
+  CNOT: renderControlled,
+  CX: renderControlled,
+  CZ: renderControlled,
+  SWAP: renderSwap,
+  TOFFOLI: renderToffoliFamily,
+  CCX: renderToffoliFamily
+};
+
+export function createOperationRenderer(registry: GateRenderRegistry = {}): (op: CircuitOp, phaseCenterX: number, layout: Layout) => string {
+  const mergedRegistry = { ...DEFAULT_GATE_RENDERERS, ...registry };
+
+  return (op: CircuitOp, phaseCenterX: number, layout: Layout): string => {
+    if (op.type === "measure") {
+      return renderMeasure(op.target, phaseCenterX, layout);
+    }
+    if (op.type === "reset") {
+      return renderReset(op.target, phaseCenterX, layout);
+    }
+
+    if (op.isControlledCustom) {
+      return renderControlledCustom(op, phaseCenterX, layout);
+    }
+
+    if (op.isCustom) {
+      return renderCustomGate(op, phaseCenterX, layout);
+    }
+
+    if (op.targets.length === 1) {
+      return renderSingleGate(op, phaseCenterX, wireY(op.targets[0], layout), layout);
+    }
+
+    const handler = mergedRegistry[op.name];
+    if (handler) {
+      return handler(op, phaseCenterX, layout);
+    }
+
+    // Fallback for unsupported multi-qubit gates.
+    return renderSingleGate(
+      { type: "gate", name: op.name, targets: [op.targets[0]], params: op.params },
+      phaseCenterX,
+      wireY(op.targets[0], layout),
+      layout
+    );
+  };
+}
+
+export const renderOperation = createOperationRenderer();

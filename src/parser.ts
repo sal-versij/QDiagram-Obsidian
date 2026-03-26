@@ -1,14 +1,13 @@
 import { CircuitAst, GateDef } from "./types";
 import {
   BUILTIN_GATES,
-  SINGLE_QUBIT_GATES,
-  TWO_QUBIT_GATES,
-  THREE_QUBIT_GATES
+  getBuiltinGateArity
 } from "./gate-registry";
 import { buildPhases } from "./phase-scheduler";
 import { expandMacroCall, ResolvedOpRecord } from "./macro-expander";
 import { tokenize } from "./dsl-tokenizer";
 import { AliasDecl, resolveQubitsAndAliases } from "./declaration-resolver";
+import { formatQubitTargetCount } from "./error-format";
 
 type TempGate = {
   kind: "gate";
@@ -137,23 +136,10 @@ function parseOperation(statement: string, line: number): TempOp {
   const { gate, params } = parseGateToken(parts[0]);
   const argRefs = parts.slice(1);
 
-  if (SINGLE_QUBIT_GATES.has(gate)) {
-    if (argRefs.length !== 1) {
-      throw new Error(`Line ${line}: gate ${gate} expects one qubit target.`);
-    }
-    return { kind: "gate", line, name: gate, params, targetRefs: argRefs, conditional };
-  }
-
-  if (TWO_QUBIT_GATES.has(gate)) {
-    if (argRefs.length !== 2) {
-      throw new Error(`Line ${line}: gate ${gate} expects two qubit targets.`);
-    }
-    return { kind: "gate", line, name: gate, params, targetRefs: argRefs, conditional };
-  }
-
-  if (THREE_QUBIT_GATES.has(gate)) {
-    if (argRefs.length !== 3) {
-      throw new Error(`Line ${line}: gate ${gate} expects three qubit targets.`);
+  const arity = getBuiltinGateArity(gate);
+  if (arity !== undefined) {
+    if (argRefs.length !== arity) {
+      throw new Error(`Line ${line}: gate ${gate} expects ${formatQubitTargetCount(arity, "word")}.`);
     }
     return { kind: "gate", line, name: gate, params, targetRefs: argRefs, conditional };
   }
@@ -454,7 +440,7 @@ class CircuitBuilder {
       }
       if (op.targetRefs.length !== custom.params.length) {
         throw new Error(
-          `Line ${item.line}: gate ${custom.name} expects ${custom.params.length} qubit targets.`
+          `Line ${item.line}: gate ${custom.name} expects ${formatQubitTargetCount(custom.params.length, "number")}.`
         );
       }
 

@@ -18,7 +18,7 @@ Status markers:
 
 - [x] Align README.md examples with full parser-supported syntax.
 - [x] Align MANUAL.md with parser behavior for M, RESET, CGATE, and conditional constraints.
-- [ ] Normalize parser error style for equivalent validation cases.
+- [x] Normalize parser error style for equivalent validation cases.
 - [x] Add coherence-focused tests in src/main.test.ts.
 
 ## Phase C: Parser Refactor (Moderate OOP)
@@ -40,8 +40,8 @@ Status markers:
 
 - [x] Introduce centralized gate metadata registry.
 - [x] Unify target-span/occupied-qubit helpers across parser and renderer.
-- [ ] Define low-friction extension points for new gate types.
-- [ ] Remove abstractions that do not reduce coupling or duplication.
+- [x] Define low-friction extension points for new gate types.
+- [x] Remove abstractions that do not reduce coupling or duplication.
 
 ## Deferred for Later
 
