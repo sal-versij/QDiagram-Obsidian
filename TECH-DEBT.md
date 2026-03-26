@@ -1,66 +1,44 @@
 # QDiagram Technical Debt
 
-This file tracks concrete ad hoc areas discovered in the current code and why they are debt.
+This file tracks remaining debt after the parser/renderer cleanup and folder-structure stabilization.
 
-## Parser Debt
+## Active Debt
 
-1. Grouping state machine in one loop
-- File: src/parser.ts
-- Symptom: inBraces, braceGroupId, commaGroupId, nextGroupId are managed inline in parseCircuitDsl.
-- Why debt: grouping and statement parsing are tightly coupled, making changes risky.
+1. Renderer extensibility is currently function-registry based
+- Files: src/renderer/gate-renderer.ts, src/shared/gate-registry.ts
+- Symptom: extension points exist, but there is no public plugin-facing registration API yet.
+- Why debt: adding new external gate packs still requires source edits.
 
-2. Nested macro expander closure
-- File: src/parser.ts
-- Symptom: expandMacro is defined inside parseCircuitDsl and captures many outer mutable structures.
-- Why debt: hard to unit test independently and easy to introduce hidden coupling.
+2. Parser declaration+operation loop is still a large unit
+- File: src/parser/index.ts
+- Symptom: orchestration is now cleaner, but declaration parsing and operation collection still run in one main build loop.
+- Why debt: future grammar expansion will be easier if statement parsing is further decomposed.
 
-3. Phase scheduling complexity
-- File: src/parser.ts
-- Symptom: buildPhases tracks multiple maps/sets and conflict logic in one function.
-- Why debt: difficult to reason about invariants and extend scheduling rules safely.
+## Resolved in This Cleanup
 
-4. Gate metadata spread across sets and branches
-- File: src/parser.ts
-- Symptom: arity/type checks are spread across multiple gate sets and parse paths.
-- Why debt: adding gates requires touching multiple places.
-
-## Renderer Debt
-
-1. Single large dispatch function
-- File: src/renderer.ts
-- Symptom: renderOp uses long branching for many gate types.
-- Why debt: behavior additions increase branch complexity and duplicate geometry logic.
-
-2. Duplicated geometry and box/label logic
-- File: src/renderer.ts
-- Symptom: repeated calculations for x/y/width/height and repeated rect+text output patterns.
-- Why debt: increases maintenance overhead and inconsistency risk.
-
-3. Classical routing mixed with global render flow
-- File: src/renderer.ts
-- Symptom: pipe routing and anchor calculations are embedded in full render pass.
-- Why debt: routing changes can unintentionally affect unrelated render behavior.
+- Parser tokenizer extracted to src/parser/dsl-tokenizer.ts.
+- Declaration and alias resolution extracted to src/parser/declaration-resolver.ts.
+- Macro expansion extracted to src/parser/macro-expander.ts.
+- Phase scheduling extracted to src/parser/phase-scheduler.ts.
+- Parser facade preserved at src/parser/index.ts.
+- Renderer layout extracted to src/renderer/layout.ts.
+- Classical routing extracted to src/renderer/classical-router.ts.
+- Gate rendering extracted to src/renderer/gate-renderer.ts.
+- Shared gate metadata moved to src/shared/gate-registry.ts.
+- Shared op helpers moved to src/shared/op-utils.ts.
+- Shared AST/op types moved to src/shared/types.ts.
 
 ## Documentation Debt
 
-1. Feature coverage mismatch across docs
-- Files: README.md, MANUAL.md
-- Symptom: some parser-supported syntax is incompletely represented in top-level docs.
-- Why debt: user expectations can diverge from implemented behavior.
-
-2. Missing architecture/workflow debt docs (now added)
-- Files: ARCHITECTURE.md, DSL-REFERENCE.md, WORKFLOW.md, ROADMAP-ADHOC.md
-- Status: created to reduce future ad hoc drift.
+1. Keep architecture docs aligned with future module moves
+- Files: AGENTS.md, ARCHITECTURE.md, WORKFLOW.md, ROADMAP-ADHOC.md
+- Symptom: structural docs are now aligned, but they can drift after future refactors.
+- Why debt: stale structure docs cause onboarding and agent mistakes.
 
 ## Priority Tags
 
-- High:
-  - parser grouping state machine
-  - nested macro expander closure
-  - renderer dispatch branching
 - Medium:
-  - phase scheduler extraction
-  - geometry deduplication
-  - classical route extraction
+  - public extension API for custom gate-render handlers
+  - optional further split of parser main orchestration loop
 - Low:
-  - wording and consistency updates in user docs
+  - continuous doc path synchronization

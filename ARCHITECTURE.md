@@ -6,8 +6,8 @@ This document describes the current runtime sequence, module responsibilities, a
 
 1. Obsidian finds a markdown code block with language quantum or qcircuit.
 2. Plugin entrypoint in src/main.ts calls renderBlock(source, el).
-3. Parser in src/parser.ts converts DSL text into CircuitAst via parseCircuitDsl(source).
-4. Renderer in src/renderer.ts converts CircuitAst into SVG markup via renderCircuitSvg(ast).
+3. Parser in src/parser/index.ts converts DSL text into CircuitAst via parseCircuitDsl(source).
+4. Renderer in src/renderer/index.ts converts CircuitAst into SVG markup via renderCircuitSvg(ast).
 5. Plugin parses SVG markup with DOMParser and appends SVG node to the container.
 6. If parse or render throws, the plugin writes a user-visible error div.
 
@@ -16,18 +16,22 @@ This document describes the current runtime sequence, module responsibilities, a
 - src/main.ts
   - Owns Obsidian lifecycle and markdown block registration.
   - Keeps all parser/renderer calls behind renderBlock.
-- src/parser.ts
+- src/parser/index.ts
+  - Parser facade and orchestration.
+- src/parser/
   - Tokenization of DSL.
   - Declarations parsing: qubits, alias, GATE, CGATE.
-  - Operation parsing: built-ins, measure/M, reset, conditionals.
   - Macro expansion and recursion guard.
   - Phase scheduling and explicit group locking.
-- src/renderer.ts
+  - Parser error formatting helpers.
+- src/renderer/index.ts
+  - Renderer facade and SVG composition.
+- src/renderer/
   - Layout geometry (wire/phase coordinates, sizing).
-  - Per-op SVG rendering (built-ins, custom gates, controlled custom, swap, measure, reset).
+  - Per-op SVG rendering dispatcher and handlers.
   - Classical route rendering for conditioned gates.
   - Macro expansion container overlays and lane assignment.
-- src/types.ts
+- src/shared/types.ts
   - Shared contracts for CircuitAst, CircuitOp, GateOp, Phase, MacroExpansion.
 - src/main.test.ts
   - Behavior lock for parser and renderer.
@@ -57,8 +61,8 @@ This document describes the current runtime sequence, module responsibilities, a
 
 ## Intentional Contracts to Preserve During Refactor
 
-- Public parser entry: parseCircuitDsl(source) in src/parser.ts.
-- Public renderer entry: renderCircuitSvg(ast) in src/renderer.ts.
+- Public parser entry: parseCircuitDsl(source) in src/parser/index.ts.
+- Public renderer entry: renderCircuitSvg(ast) in src/renderer/index.ts.
 - Existing SVG class names consumed by tests and styles:
   - quantum-custom-gate
   - quantum-classical-pipe

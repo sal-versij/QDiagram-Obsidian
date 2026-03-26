@@ -8,16 +8,18 @@ QDiagram is an Obsidian plugin that renders quantum circuits from markdown code 
 
 Primary flow:
 1. Code block source is received in `src/main.ts`.
-2. DSL is parsed by `parseCircuitDsl` in `src/parser.ts`.
-3. AST is rendered to SVG by `renderCircuitSvg` in `src/renderer.ts`.
+2. DSL is parsed by `parseCircuitDsl` in `src/parser/index.ts`.
+3. AST is rendered to SVG by `renderCircuitSvg` in `src/renderer/index.ts`.
 4. Plugin appends the parsed SVG element to the markdown container.
 
 ## Repository Layout
 
 - `src/main.ts`: Obsidian plugin entrypoint and markdown code block processors.
-- `src/parser.ts`: DSL tokenizer, parser, validation, macro expansion, and phase scheduling.
-- `src/renderer.ts`: SVG rendering for wires, gates, measurements, conditionals, aliases, and macro containers.
-- `src/types.ts`: shared AST and op types (`CircuitAst`, `CircuitOp`, `GateOp`, etc.).
+- `src/parser/index.ts`: parser facade and orchestration.
+- `src/parser/`: parser services (tokenizer, declaration resolver, macro expander, phase scheduler, parser error formatting).
+- `src/renderer/index.ts`: renderer facade and SVG composition flow.
+- `src/renderer/`: renderer services (layout, gate renderer, classical routing).
+- `src/shared/`: shared gate metadata, op helpers, and AST/op types (`CircuitAst`, `CircuitOp`, `GateOp`, etc.).
 - `src/main.test.ts`: Vitest coverage for parser and renderer behaviors.
 - `esbuild.config.mjs`: build pipeline and artifact copy to `output/`.
 - `manifest.json`, `styles.css`: copied to `output/` on successful build.
@@ -58,7 +60,7 @@ When changing parser behavior, preserve these existing rules unless the task exp
 ## Renderer Conventions
 
 - Keep Obsidian CSS variables (`var(--text-normal)`, `var(--background-primary)`, etc.) for theme compatibility.
-- Gate rendering distinctions in `src/renderer.ts` are intentional:
+- Gate rendering distinctions in `src/renderer/gate-renderer.ts` are intentional:
   - built-in controlled gates (`CNOT/CX/CZ`) use control-dot + target glyph.
   - `SWAP` uses crossed X markers.
   - controlled custom gates use control-dot + labeled target box.

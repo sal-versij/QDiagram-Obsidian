@@ -1,5 +1,5 @@
-import { Layout, phaseX, wireY } from "./circuit-layout";
-import { CircuitAst } from "./types";
+import { Layout, phaseX, wireY } from "./layout";
+import { CircuitAst } from "../shared/types";
 
 function renderClassicalPipe(fromX: number, fromY: number, toX: number, toY: number): string {
   // Single split route: horizontal from measurement output, then vertical into gate boundary.

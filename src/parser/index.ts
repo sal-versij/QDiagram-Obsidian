@@ -1,8 +1,8 @@
-import { CircuitAst, GateDef } from "./types";
+import { CircuitAst, GateDef } from "../shared/types";
 import {
   BUILTIN_GATES,
   getBuiltinGateArity
-} from "./gate-registry";
+} from "../shared/gate-registry";
 import { buildPhases } from "./phase-scheduler";
 import { expandMacroCall, ResolvedOpRecord } from "./macro-expander";
 import { tokenize } from "./dsl-tokenizer";

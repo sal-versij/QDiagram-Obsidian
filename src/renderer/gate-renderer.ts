@@ -1,5 +1,5 @@
-import { customGateWidth, Layout, wireY } from "./circuit-layout";
-import { CircuitOp, GateOp } from "./types";
+import { customGateWidth, Layout, wireY } from "./layout";
+import { CircuitOp, GateOp } from "../shared/types";
 
 export type GateRenderHandler = (op: GateOp, phaseCenterX: number, layout: Layout) => string;
 export type GateRenderRegistry = Partial<Record<string, GateRenderHandler>>;

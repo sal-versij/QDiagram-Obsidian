@@ -47,11 +47,13 @@ This file documents the day-to-day implementation workflow for this repository.
 ## Typical Touchpoints by Task
 
 - DSL syntax and validation:
-  - src/parser.ts
-  - src/types.ts
+  - src/parser/index.ts
+  - src/parser/
+  - src/shared/types.ts
   - src/main.test.ts
 - Visual rendering/layout:
-  - src/renderer.ts
+  - src/renderer/index.ts
+  - src/renderer/
   - styles.css
   - src/main.test.ts
 - Plugin lifecycle and block processing:

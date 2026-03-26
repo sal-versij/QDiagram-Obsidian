@@ -1,4 +1,4 @@
-import { BUILTIN_GATES } from "./gate-registry";
+import { BUILTIN_GATES } from "../shared/gate-registry";
 
 export type AliasDecl = {
   line: number;

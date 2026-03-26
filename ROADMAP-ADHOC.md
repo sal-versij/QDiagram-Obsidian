@@ -13,6 +13,7 @@ Status markers:
 - [x] Add WORKFLOW.md.
 - [x] Add TECH-DEBT.md.
 - [x] Create this staged roadmap.
+- [x] Establish parser/renderer/shared folder structure for modular organization.
 
 ## Phase B: Syntax Coherence
 

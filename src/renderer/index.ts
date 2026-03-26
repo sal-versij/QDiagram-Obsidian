@@ -1,14 +1,14 @@
-import { CircuitAst, CircuitOp } from "./types";
+import { CircuitAst, CircuitOp } from "../shared/types";
 import {
   Layout,
   DEFAULT_LAYOUT,
   estimateTextWidth,
   wireY,
   phaseX
-} from "./circuit-layout";
+} from "./layout";
 import { collectClassicalRouting } from "./classical-router";
 import { renderOperation } from "./gate-renderer";
-import { opTouchedQubits } from "./op-utils";
+import { opTouchedQubits } from "../shared/op-utils";
 
 function esc(text: string): string {
   return text

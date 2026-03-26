@@ -1,6 +1,6 @@
 # QDiagram DSL Reference
 
-This reference reflects behavior implemented in src/parser.ts and covered by src/main.test.ts.
+This reference reflects behavior implemented in src/parser/index.ts (plus parser services under src/parser/) and covered by src/main.test.ts.
 
 ## Comments
 

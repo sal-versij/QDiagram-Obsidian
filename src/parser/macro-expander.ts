@@ -1,5 +1,5 @@
-import { BUILTIN_GATES } from "./gate-registry";
-import { CircuitOp } from "./types";
+import { BUILTIN_GATES } from "../shared/gate-registry";
+import { CircuitOp } from "../shared/types";
 import { formatQubitTargetCount } from "./error-format";
 
 export type MacroBodyGateOp = {

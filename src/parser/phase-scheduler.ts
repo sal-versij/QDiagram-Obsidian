@@ -1,5 +1,5 @@
-import { CircuitOp, Phase } from "./types";
-import { opOccupiedQubits, opTargets } from "./op-utils";
+import { CircuitOp, Phase } from "../shared/types";
+import { opOccupiedQubits, opTargets } from "../shared/op-utils";
 
 export type ScheduledOpInput = {
   op: CircuitOp;
