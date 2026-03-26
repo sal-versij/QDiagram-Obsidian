@@ -1,16 +1,13 @@
-import { CircuitAst, CircuitOp, GateDef, Phase } from "./types";
+import { CircuitAst, GateDef } from "./types";
 import {
   BUILTIN_GATES,
   SINGLE_QUBIT_GATES,
   TWO_QUBIT_GATES,
   THREE_QUBIT_GATES
 } from "./gate-registry";
-
-type ChunkToken = {
-  type: "chunk" | "comma" | "semi" | "lbrace" | "rbrace" | "newline";
-  text?: string;
-  line: number;
-};
+import { buildPhases } from "./phase-scheduler";
+import { expandMacroCall, ResolvedOpRecord } from "./macro-expander";
+import { tokenize } from "./dsl-tokenizer";
 
 type AliasDecl = {
   line: number;
@@ -75,67 +72,6 @@ function parseGateToken(token: string): { gate: string; params: string[] } {
     .map((part) => part.trim())
     .filter((part) => part.length > 0);
   return { gate: gateRaw.toUpperCase(), params };
-}
-
-function tokenize(source: string): ChunkToken[] {
-  const tokens: ChunkToken[] = [];
-  let current = "";
-  let currentLine = 1;
-  let line = 1;
-
-  const flush = (): void => {
-    const text = current.trim();
-    if (text.length > 0) {
-      tokens.push({ type: "chunk", text, line: currentLine });
-    }
-    current = "";
-  };
-
-  for (let i = 0; i < source.length; i += 1) {
-    const ch = source[i];
-
-    if (ch === "#") {
-      while (i + 1 < source.length && source[i + 1] !== "\n") {
-        i += 1;
-      }
-      continue;
-    }
-
-    if (ch === "\r") {
-      continue;
-    }
-
-    if (ch === "\n") {
-      flush();
-      tokens.push({ type: "newline", line });
-      line += 1;
-      currentLine = line;
-      continue;
-    }
-
-    if (ch === "," || ch === ";" || ch === "{" || ch === "}") {
-      flush();
-      if (ch === ",") {
-        tokens.push({ type: "comma", line });
-      } else if (ch === ";") {
-        tokens.push({ type: "semi", line });
-      } else if (ch === "{") {
-        tokens.push({ type: "lbrace", line });
-      } else {
-        tokens.push({ type: "rbrace", line });
-      }
-      currentLine = line;
-      continue;
-    }
-
-    if (current.length === 0) {
-      currentLine = line;
-    }
-    current += ch;
-  }
-
-  flush();
-  return tokens;
 }
 
 function parseAliasDecl(statement: string, line: number): AliasDecl {
@@ -289,11 +225,6 @@ function parseGateDefinition(statement: string, line: number): InternalGateDef {
   return { name, params, type: "macro", body };
 }
 
-function substituteRef(ref: string, paramBindings: Map<string, string>): string {
-  const mapped = paramBindings.get(ref);
-  return mapped ?? ref;
-}
-
 function resolveQubitRef(ref: string, aliasesByName: Map<string, number>, qubits: number, line: number): number {
   if (/^\d+$/.test(ref)) {
     const target = parsePositiveInt(ref, line, "qubit index");
@@ -317,180 +248,6 @@ function resolveQubitRef(ref: string, aliasesByName: Map<string, number>, qubits
     throw new Error(`Line ${line}: unknown qubit reference '${ref}'.`);
   }
   return aliasTarget;
-}
-
-function opTargets(op: CircuitOp): number[] {
-  if (op.type === "gate") {
-    return op.targets;
-  }
-  return [op.target];
-}
-
-function opOccupiedQubits(op: CircuitOp): number[] {
-  const targets = opTargets(op);
-  if (targets.length <= 1) {
-    return targets;
-  }
-
-  const minQ = Math.min(...targets);
-  const maxQ = Math.max(...targets);
-  const occupied: number[] = [];
-  for (let q = minQ; q <= maxQ; q += 1) {
-    occupied.push(q);
-  }
-  return occupied;
-}
-
-function buildPhases(
-  parsedOps: Array<{ op: CircuitOp; line: number; explicitGroupId?: number; occupiedQubits?: number[] }>
-): Phase[] {
-  const units: Array<{
-    ops: CircuitOp[];
-    opIndices: number[];
-    forced: boolean;
-    qubits: Set<number>;
-    occupiedQubits: Set<number>;
-    conditionals: string[];
-  }> = [];
-
-  let i = 0;
-  while (i < parsedOps.length) {
-    const item = parsedOps[i];
-    if (item.explicitGroupId === undefined) {
-      const op = item.op;
-      const conditionals = op.type === "gate" && op.conditional ? [op.conditional] : [];
-      units.push({
-        ops: [op],
-        opIndices: [i],
-        forced: false,
-        qubits: new Set(opTargets(op)),
-        occupiedQubits: new Set(item.occupiedQubits ?? opOccupiedQubits(op)),
-        conditionals
-      });
-      i += 1;
-      continue;
-    }
-
-    const groupId = item.explicitGroupId;
-    const groupedOps: CircuitOp[] = [];
-    const groupedIndices: number[] = [];
-    const groupedQubits = new Set<number>();
-    const groupedOccupiedQubits = new Set<number>();
-    const groupedConditionals = new Set<string>();
-
-    while (i < parsedOps.length && parsedOps[i].explicitGroupId === groupId) {
-      const grouped = parsedOps[i].op;
-      groupedOps.push(grouped);
-      groupedIndices.push(i);
-      for (const q of opTargets(grouped)) {
-        groupedQubits.add(q);
-      }
-      for (const q of parsedOps[i].occupiedQubits ?? opOccupiedQubits(grouped)) {
-        groupedOccupiedQubits.add(q);
-      }
-      if (grouped.type === "gate" && grouped.conditional) {
-        groupedConditionals.add(grouped.conditional);
-      }
-      i += 1;
-    }
-
-    units.push({
-      ops: groupedOps,
-      opIndices: groupedIndices,
-      forced: true,
-      qubits: groupedQubits,
-      occupiedQubits: groupedOccupiedQubits,
-      conditionals: Array.from(groupedConditionals)
-    });
-  }
-
-  const phases: Phase[] = [];
-  const phaseOccupiedQubits: Array<Set<number>> = [];
-  const phaseLocked: boolean[] = [];
-  const opToPhase = new Map<number, number>();
-  const measureProducerOp = new Map<string, number>();
-  const qubitLastPhase = new Map<number, number>();
-
-  for (let opIndex = 0; opIndex < parsedOps.length; opIndex += 1) {
-    const op = parsedOps[opIndex].op;
-    if (op.type === "measure" && op.classical) {
-      measureProducerOp.set(op.classical, opIndex);
-    }
-  }
-
-  for (const unit of units) {
-    let minPhase = 0;
-    for (const q of unit.qubits) {
-      const last = qubitLastPhase.get(q);
-      if (last !== undefined) {
-        minPhase = Math.max(minPhase, last);
-      }
-    }
-
-    let selectedPhase = phases.length;
-    for (let phaseIndex = minPhase; phaseIndex < phases.length; phaseIndex += 1) {
-      if (phaseLocked[phaseIndex]) {
-        continue;
-      }
-
-      const used = phaseOccupiedQubits[phaseIndex];
-      let conflict = false;
-
-      for (const q of unit.occupiedQubits) {
-        if (used.has(q)) {
-          conflict = true;
-          break;
-        }
-      }
-
-      if (conflict) {
-        continue;
-      }
-
-      let hasClassicalConflict = false;
-      for (const bit of unit.conditionals) {
-        const producerOp = measureProducerOp.get(bit);
-        if (producerOp === undefined) {
-          continue;
-        }
-        const producerPhase = opToPhase.get(producerOp);
-        if (producerPhase === undefined || producerPhase >= phaseIndex) {
-          hasClassicalConflict = true;
-          break;
-        }
-      }
-
-      if (!hasClassicalConflict) {
-        selectedPhase = phaseIndex;
-        break;
-      }
-    }
-
-    if (selectedPhase === phases.length) {
-      phases.push([]);
-      phaseOccupiedQubits.push(new Set<number>());
-      phaseLocked.push(false);
-    }
-
-    const phase = phases[selectedPhase];
-    for (const op of unit.ops) {
-      phase.push(op);
-    }
-    for (const q of unit.occupiedQubits) {
-      phaseOccupiedQubits[selectedPhase].add(q);
-    }
-    for (const q of unit.qubits) {
-      qubitLastPhase.set(q, selectedPhase);
-    }
-    for (const opIdx of unit.opIndices) {
-      opToPhase.set(opIdx, selectedPhase);
-    }
-    if (unit.forced) {
-      phaseLocked[selectedPhase] = true;
-    }
-  }
-
-  return phases;
 }
 
 export function parseCircuitDsl(source: string): CircuitAst {
@@ -695,147 +452,10 @@ export function parseCircuitDsl(source: string): CircuitAst {
     aliasByName.set(alias.name, alias.index);
   }
 
-  const resolvedOps: Array<{ op: CircuitOp; line: number; explicitGroupId?: number; occupiedQubits?: number[] }> = [];
+  const resolvedOps: ResolvedOpRecord[] = [];
   const declaredClassicalBits = new Set<string>();
   const macroExpansions: Array<{ name: string; startOpIndex: number; endOpIndex: number }> = [];
   const macroStack: string[] = [];
-
-  const expandMacro = (
-    def: InternalGateDef,
-    call: TempGate,
-    callLine: number,
-    explicitGroupId?: number,
-    inheritedOccupiedQubits?: number[]
-  ): void => {
-    if (!def.body) {
-      return;
-    }
-    if (macroStack.includes(def.name)) {
-      throw new Error(`Line ${callLine}: recursive macro expansion detected for '${def.name}'.`);
-    }
-
-    const bindings = new Map<string, string>();
-    for (let idx = 0; idx < def.params.length; idx += 1) {
-      bindings.set(def.params[idx], call.targetRefs[idx]);
-    }
-
-    const resolvedCallTargets = call.targetRefs.map((ref) =>
-      resolveQubitRef(ref, aliasByName, resolvedQubits, callLine)
-    );
-    let macroOccupiedQubits: number[] | undefined = inheritedOccupiedQubits;
-    if (!macroOccupiedQubits && resolvedCallTargets.length > 1) {
-      const minQ = Math.min(...resolvedCallTargets);
-      const maxQ = Math.max(...resolvedCallTargets);
-      macroOccupiedQubits = [];
-      for (let q = minQ; q <= maxQ; q += 1) {
-        macroOccupiedQubits.push(q);
-      }
-    }
-
-    macroStack.push(def.name);
-    try {
-      for (const bodyOp of def.body) {
-        if (bodyOp.kind === "measure") {
-          const target = resolveQubitRef(
-            substituteRef(bodyOp.targetRef, bindings),
-            aliasByName,
-            resolvedQubits,
-            callLine
-          );
-          if (bodyOp.classical) {
-            declaredClassicalBits.add(bodyOp.classical);
-          }
-          resolvedOps.push({
-            line: callLine,
-            explicitGroupId,
-            occupiedQubits: macroOccupiedQubits,
-            op: { type: "measure", target, classical: bodyOp.classical }
-          });
-          continue;
-        }
-
-        if (bodyOp.kind === "reset") {
-          const target = resolveQubitRef(
-            substituteRef(bodyOp.targetRef, bindings),
-            aliasByName,
-            resolvedQubits,
-            callLine
-          );
-          resolvedOps.push({
-            line: callLine,
-            explicitGroupId,
-            occupiedQubits: macroOccupiedQubits,
-            op: { type: "reset", target }
-          });
-          continue;
-        }
-
-        const expandedTargets = bodyOp.targetRefs.map((ref) =>
-          resolveQubitRef(substituteRef(ref, bindings), aliasByName, resolvedQubits, callLine)
-        );
-        const effectiveConditional = bodyOp.conditional ?? call.conditional;
-        if (effectiveConditional && !declaredClassicalBits.has(effectiveConditional)) {
-          throw new Error(`Line ${callLine}: classical bit '${effectiveConditional}' not declared.`);
-        }
-
-        if (BUILTIN_GATES.has(bodyOp.name)) {
-          resolvedOps.push({
-            line: callLine,
-            explicitGroupId,
-            occupiedQubits: macroOccupiedQubits,
-            op: {
-              type: "gate",
-              name: bodyOp.name,
-              targets: expandedTargets,
-              params: bodyOp.params,
-              conditional: effectiveConditional
-            }
-          });
-          continue;
-        }
-
-        const nested = gateDecls.get(bodyOp.name);
-        if (!nested) {
-          throw new Error(`Line ${callLine}: unknown operation '${bodyOp.name}'.`);
-        }
-        if (expandedTargets.length !== nested.params.length) {
-          throw new Error(
-            `Line ${callLine}: gate ${nested.name} expects ${nested.params.length} qubit targets.`
-          );
-        }
-
-        const nestedCall: TempGate = {
-          kind: "gate",
-          line: callLine,
-          name: nested.name,
-          params: bodyOp.params,
-          targetRefs: bodyOp.targetRefs.map((ref) => substituteRef(ref, bindings)),
-          conditional: effectiveConditional
-        };
-
-        if (nested.type === "blackbox" || nested.type === "cgate") {
-          resolvedOps.push({
-            line: callLine,
-            explicitGroupId,
-            occupiedQubits: macroOccupiedQubits,
-            op: {
-              type: "gate",
-              name: nested.name,
-              targets: nestedCall.targetRefs.map((ref) => resolveQubitRef(ref, aliasByName, resolvedQubits, callLine)),
-              params: nestedCall.params,
-              conditional: nestedCall.conditional,
-              isCustom: true,
-              isControlledCustom: nested.type === "cgate"
-            }
-          });
-        } else {
-          expandMacro(nested, nestedCall, callLine, explicitGroupId, macroOccupiedQubits);
-        }
-      }
-    } finally {
-      macroStack.pop();
-    }
-  };
 
   for (const item of parsedItems) {
     const op = item.op;
@@ -891,7 +511,19 @@ export function parseCircuitDsl(source: string): CircuitAst {
         });
       } else {
         const startOpIndex = resolvedOps.length;
-        expandMacro(custom, op, item.line, item.explicitGroupId);
+        expandMacroCall({
+          def: custom,
+          call: op,
+          callLine: item.line,
+          explicitGroupId: item.explicitGroupId,
+          gateDecls,
+          aliasByName,
+          resolvedQubits,
+          declaredClassicalBits,
+          resolvedOps,
+          macroStack,
+          resolveQubitRef
+        });
         const endOpIndex = resolvedOps.length - 1;
         if (endOpIndex >= startOpIndex) {
           macroExpansions.push({

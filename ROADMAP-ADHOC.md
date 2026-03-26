@@ -23,10 +23,10 @@ Status markers:
 
 ## Phase C: Parser Refactor (Moderate OOP)
 
-- [ ] Extract tokenizer service from parser monolith.
+- [x] Extract tokenizer service from parser monolith.
 - [ ] Extract declaration/alias resolver service.
-- [ ] Extract macro expansion service.
-- [ ] Extract phase scheduler service.
+- [x] Extract macro expansion service.
+- [x] Extract phase scheduler service.
 - [ ] Add circuit builder orchestrator with stable parse facade.
 
 ## Phase D: Renderer Refactor (Moderate OOP)
