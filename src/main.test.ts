@@ -370,6 +370,33 @@ describe("parseCircuitDsl", () => {
   });
 
   describe("Regression fixes", () => {
+    it("parses reset operations", () => {
+      const ast = parseCircuitDsl([
+        "qubits 1",
+        "RESET 0"
+      ].join("\n"));
+
+      expect(ast.ops.length).toBe(1);
+      expect(ast.ops[0].type).toBe("reset");
+      if (ast.ops[0].type === "reset") {
+        expect(ast.ops[0].target).toBe(0);
+      }
+    });
+
+    it("accepts measurement shorthand without classical target", () => {
+      const ast = parseCircuitDsl([
+        "qubits 1",
+        "M 0"
+      ].join("\n"));
+
+      expect(ast.ops.length).toBe(1);
+      expect(ast.ops[0].type).toBe("measure");
+      if (ast.ops[0].type === "measure") {
+        expect(ast.ops[0].target).toBe(0);
+        expect(ast.ops[0].classical).toBeUndefined();
+      }
+    });
+
     it("accepts inline comments after gates", () => {
       const ast = parseCircuitDsl([
         "qubits 1",
@@ -636,6 +663,16 @@ describe("parseCircuitDsl", () => {
       const iconParts = (svg.match(/class="quantum-measure-icon"/g) || []).length;
 
       expect(iconParts).toBeGreaterThanOrEqual(3);
+    });
+
+    it("renders reset operation with RST label", () => {
+      const ast = parseCircuitDsl([
+        "qubits 1",
+        "RESET 0"
+      ].join("\n"));
+      const svg = renderCircuitSvg(ast);
+
+      expect(svg).toContain(">RST<");
     });
   });
 });

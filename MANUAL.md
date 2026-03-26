@@ -55,6 +55,13 @@ H ancilla
 CNOT data flag
 ```
 
+Alias rules:
+
+- Alias names must be unique.
+- Alias names cannot collide with built-in gate names.
+- Alias names cannot collide with custom gate names you define with `GATE` or `CGATE`.
+- Alias indices must be in range for declared/inferred qubits.
+
 ## 4) Parallel Operations
 
 Independent operations are grouped automatically.
@@ -126,6 +133,8 @@ X 1 [c0]
 ```
 
 You can reuse the same classical bit for multiple gates.
+
+Important rule: conditioned gates cannot forward-reference classical bits. The bit in `[c0]` must be declared earlier by `MEASURE` or `M`.
 
 ## 7) Complete Example
 

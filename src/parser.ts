@@ -1,13 +1,10 @@
 import { CircuitAst, CircuitOp, GateDef, Phase } from "./types";
-
-const SINGLE_QUBIT_GATES = new Set(["H", "X", "Y", "Z", "S", "T", "RX", "RY", "RZ"]);
-const TWO_QUBIT_GATES = new Set(["CNOT", "CX", "CZ", "SWAP"]);
-const THREE_QUBIT_GATES = new Set(["TOFFOLI", "CCX"]);
-const BUILTIN_GATES = new Set([
-  ...Array.from(SINGLE_QUBIT_GATES),
-  ...Array.from(TWO_QUBIT_GATES),
-  ...Array.from(THREE_QUBIT_GATES)
-]);
+import {
+  BUILTIN_GATES,
+  SINGLE_QUBIT_GATES,
+  TWO_QUBIT_GATES,
+  THREE_QUBIT_GATES
+} from "./gate-registry";
 
 type ChunkToken = {
   type: "chunk" | "comma" | "semi" | "lbrace" | "rbrace" | "newline";
