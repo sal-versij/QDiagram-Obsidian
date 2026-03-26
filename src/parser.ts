@@ -8,12 +8,7 @@ import {
 import { buildPhases } from "./phase-scheduler";
 import { expandMacroCall, ResolvedOpRecord } from "./macro-expander";
 import { tokenize } from "./dsl-tokenizer";
-
-type AliasDecl = {
-  line: number;
-  index: number;
-  name: string;
-};
+import { AliasDecl, resolveQubitsAndAliases } from "./declaration-resolver";
 
 type TempGate = {
   kind: "gate";
@@ -250,8 +245,11 @@ function resolveQubitRef(ref: string, aliasesByName: Map<string, number>, qubits
   return aliasTarget;
 }
 
-export function parseCircuitDsl(source: string): CircuitAst {
-  const tokens = tokenize(source);
+class CircuitBuilder {
+  constructor(private readonly source: string) {}
+
+  build(): CircuitAst {
+  const tokens = tokenize(this.source);
   let qubits: number | undefined;
 
   const aliasDecls: AliasDecl[] = [];
@@ -413,44 +411,12 @@ export function parseCircuitDsl(source: string): CircuitAst {
     throw new Error(`Line ${lastLine}: missing closing '}'.`);
   }
 
-  const resolvedQubits = qubits ?? (() => {
-    let maxRef = -1;
-    for (const item of parsedItems) {
-      const op = item.op;
-      const refs = op.kind === "gate" ? op.targetRefs : [op.targetRef];
-      for (const ref of refs) {
-        const numeric = ref.match(/^\d+$/) || ref.match(/^q(\d+)$/i);
-        if (numeric) {
-          const value = numeric.length === 1 ? parsePositiveInt(numeric[0], item.line, "qubit index") : parsePositiveInt(numeric[1], item.line, "qubit index");
-          maxRef = Math.max(maxRef, value);
-        }
-      }
-    }
-    return Math.max(1, maxRef + 1);
-  })();
-
-  const aliasByIndex = new Map<number, string>();
-  const aliasByName = new Map<string, number>();
-  for (const alias of aliasDecls) {
-    if (alias.index >= resolvedQubits) {
-      throw new Error(`Line ${alias.line}: alias q${alias.index} exceeds declared ${resolvedQubits} qubits.`);
-    }
-    if (aliasByIndex.has(alias.index)) {
-      throw new Error(`Line ${alias.line}: duplicate alias for q${alias.index}.`);
-    }
-    if (aliasByName.has(alias.name)) {
-      throw new Error(`Line ${alias.line}: duplicate alias name '${alias.name}'.`);
-    }
-    const aliasUpper = alias.name.toUpperCase();
-    if (BUILTIN_GATES.has(aliasUpper)) {
-      throw new Error(`Line ${alias.line}: alias name '${alias.name}' conflicts with built-in gate.`);
-    }
-    if (gateDecls.has(aliasUpper)) {
-      throw new Error(`Line ${alias.line}: alias name '${alias.name}' conflicts with custom gate.`);
-    }
-    aliasByIndex.set(alias.index, alias.name);
-    aliasByName.set(alias.name, alias.index);
-  }
+  const { resolvedQubits, aliasByIndex, aliasByName } = resolveQubitsAndAliases({
+    qubits,
+    parsedItems,
+    aliasDecls,
+    customGateNames: new Set(gateDecls.keys())
+  });
 
   const resolvedOps: ResolvedOpRecord[] = [];
   const declaredClassicalBits = new Set<string>();
@@ -585,5 +551,10 @@ export function parseCircuitDsl(source: string): CircuitAst {
     ast.macroExpansions = macroExpansions;
   }
 
-  return ast;
+    return ast;
+  }
+}
+
+export function parseCircuitDsl(source: string): CircuitAst {
+  return new CircuitBuilder(source).build();
 }

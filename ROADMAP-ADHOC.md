@@ -24,15 +24,15 @@ Status markers:
 ## Phase C: Parser Refactor (Moderate OOP)
 
 - [x] Extract tokenizer service from parser monolith.
-- [ ] Extract declaration/alias resolver service.
+- [x] Extract declaration/alias resolver service.
 - [x] Extract macro expansion service.
 - [x] Extract phase scheduler service.
-- [ ] Add circuit builder orchestrator with stable parse facade.
+- [x] Add circuit builder orchestrator with stable parse facade.
 
 ## Phase D: Renderer Refactor (Moderate OOP)
 
 - [x] Extract layout/geometry service.
-- [ ] Extract classical route builder service.
+- [x] Extract classical route builder service.
 - [ ] Extract gate rendering components under one dispatcher.
 - [ ] Keep render facade and CSS class output stable.
 
