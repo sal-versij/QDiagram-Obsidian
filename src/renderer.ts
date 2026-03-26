@@ -153,18 +153,27 @@ function assignMacroLanes(
     if (a.startPhase !== b.startPhase) return a.startPhase - b.startPhase;
     return a.endPhase - b.endPhase;
   });
-  const laneEnds: number[] = [];
+  const laneLast: Array<{ endPhase: number; minQubit: number; maxQubit: number } | undefined> = [];
   const withLanes: MacroInterval[] = [];
 
   for (const interval of sorted) {
     let lane = 0;
-    while (lane < laneEnds.length && laneEnds[lane] >= interval.startPhase) {
+    while (lane < laneLast.length) {
+      const state = laneLast[lane];
+      if (!state) {
+        break;
+      }
+      const phaseOverlap = state.endPhase >= interval.startPhase;
+      const qubitOverlap = !(interval.maxQubit < state.minQubit || interval.minQubit > state.maxQubit);
+      if (!(phaseOverlap && qubitOverlap)) {
+        break;
+      }
       lane += 1;
     }
-    if (lane === laneEnds.length) {
-      laneEnds.push(interval.endPhase);
+    if (lane === laneLast.length) {
+      laneLast.push({ endPhase: interval.endPhase, minQubit: interval.minQubit, maxQubit: interval.maxQubit });
     } else {
-      laneEnds[lane] = interval.endPhase;
+      laneLast[lane] = { endPhase: interval.endPhase, minQubit: interval.minQubit, maxQubit: interval.maxQubit };
     }
     withLanes.push({ ...interval, lane });
   }
@@ -176,19 +185,24 @@ function renderMacroContainer(
   interval: MacroInterval,
   laneCount: number,
   layout: Layout
-): { box: string; label: string } {
+): { box: string; labelBg: string; label: string } {
   const x1 = phaseX(interval.startPhase, layout) - layout.colGap * 0.42;
   const x2 = phaseX(interval.endPhase, layout) + layout.colGap * 0.42;
-  const laneStep = 16;
-  const topTouchedY = wireY(interval.minQubit, layout) - layout.gateHeight / 2 - 8;
-  const y = Math.max(6, topTouchedY - (interval.lane + 1) * laneStep);
-  const bottomTouchedY = wireY(interval.maxQubit, layout) + layout.gateHeight / 2 + 8;
-  const h = Math.max(20, bottomTouchedY - y);
+  const laneStep = 12;
+  const verticalPad = 5;
+  const topTouchedY = wireY(interval.minQubit, layout) - layout.gateHeight / 2 - verticalPad;
+  const y = Math.max(6, topTouchedY - interval.lane * laneStep);
+  const bottomTouchedY = wireY(interval.maxQubit, layout) + layout.gateHeight / 2 + verticalPad;
+  const h = Math.max(18, bottomTouchedY - y);
   const w = x2 - x1;
-  const labelY = Math.max(8, y - 4);
+  const labelY = Math.max(9, y + 2);
+  const labelW = estimateTextWidth(interval.name, 10) + 8;
+  const labelBgX = x1 + 7;
+  const labelBgY = labelY - 9;
 
   return {
     box: `<rect class="quantum-macro-container" x="${x1}" y="${y}" width="${w}" height="${h}" rx="10" ry="10" fill="none" stroke="var(--text-muted)" stroke-width="1.2" opacity="0.55" />`,
+    labelBg: `<rect class="quantum-macro-container-label-bg" x="${labelBgX}" y="${labelBgY}" width="${labelW}" height="11" rx="3" ry="3" fill="var(--background-primary)" opacity="0.98" />`,
     label: `<text class="quantum-macro-container-label" x="${x1 + 10}" y="${labelY}" text-anchor="start" font-size="10" fill="var(--text-muted)">${esc(interval.name)}</text>`
   };
 }
@@ -344,7 +358,7 @@ export function renderCircuitSvg(ast: CircuitAst): string {
   const layout: Layout = {
     ...DEFAULT_LAYOUT,
     leftPadding: Math.max(DEFAULT_LAYOUT.leftPadding, labelAreaWidth + 20),
-    topPadding: macroLaneCount > 0 ? DEFAULT_LAYOUT.topPadding + macroLaneCount * 14 + 6 : DEFAULT_LAYOUT.topPadding
+    topPadding: macroLaneCount > 0 ? DEFAULT_LAYOUT.topPadding + macroLaneCount * 10 + 4 : DEFAULT_LAYOUT.topPadding
   };
   const width = layout.leftPadding + (ast.phases.length + 2) * layout.colGap;
   const height = layout.topPadding * 2 + (ast.qubits - 1) * layout.rowGap;
@@ -446,6 +460,7 @@ export function renderCircuitSvg(ast: CircuitAst): string {
 
   const macroRendered = macroIntervals.map((interval) => renderMacroContainer(interval, macroLaneCount, layout));
   const macroBoxEls = macroRendered.map((item) => item.box);
+  const macroLabelBgEls = macroRendered.map((item) => item.labelBg);
   const macroLabelEls = macroRendered.map((item) => item.label);
 
   return [
@@ -455,6 +470,7 @@ export function renderCircuitSvg(ast: CircuitAst): string {
     ...macroBoxEls,
     ...pipeEls,
     ...opEls,
+    ...macroLabelBgEls,
     ...macroLabelEls,
     "</svg>"
   ].join("");

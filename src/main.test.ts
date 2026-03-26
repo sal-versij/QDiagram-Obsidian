@@ -450,6 +450,7 @@ describe("parseCircuitDsl", () => {
       const containerMatch = svg.match(/class="quantum-macro-container"[^>]*\swidth="([0-9.]+)"/);
       const yMatch = svg.match(/class="quantum-macro-container"[^>]*\sy="([0-9.]+)"[^>]*\sheight="([0-9.]+)"/);
       const labelYMatch = svg.match(/class="quantum-macro-container-label"[^>]*\sy="([0-9.]+)"/);
+      const labelBgMatch = svg.match(/class="quantum-macro-container-label-bg"/);
       const hYs = Array.from(svg.matchAll(/<text[^>]*y="([0-9.]+)"[^>]*>H<\/text>/g)).map((m) => Number(m[1]));
       const wireYs = Array.from(svg.matchAll(/class="quantum-wire"[^>]*y1="([0-9.]+)"/g)).map((m) => Number(m[1]));
 
@@ -466,6 +467,7 @@ describe("parseCircuitDsl", () => {
 
       // Label should be placed above gates so it stays readable.
       expect(labelYMatch).not.toBeNull();
+      expect(labelBgMatch).not.toBeNull();
       expect(hYs.length).toBeGreaterThan(0);
       const minHY = Math.min(...hYs);
       expect(Number(labelYMatch?.[1] ?? "0")).toBeLessThan(minHY - 8);
@@ -501,6 +503,79 @@ describe("parseCircuitDsl", () => {
       expect(svg).toContain(">DRIVE<");
       expect(svg).toContain("<circle");
       expect(svg).toContain("<line");
+    });
+
+    it("keeps lower macro labels near their own qubit band", () => {
+      const ast = parseCircuitDsl([
+        "qubits 5",
+        "alias q0 = control",
+        "alias q1 = data",
+        "alias q2 = ancilla",
+        "alias q3 = boh",
+        "alias q4 = app",
+        "GATE BELL(a, b) = H a; CNOT a b",
+        "BELL control data",
+        "BELL ancilla boh",
+        "H app",
+        "MEASURE control -> mc",
+        "MEASURE data -> md",
+        "X ancilla [mc]",
+        "Z ancilla [md]"
+      ].join("\n"));
+      const svg = renderCircuitSvg(ast);
+
+      const labelYs = Array.from(svg.matchAll(/class="quantum-macro-container-label"[^>]*y="([0-9.]+)"/g)).map((m) => Number(m[1]));
+      const wireYs = Array.from(svg.matchAll(/class="quantum-wire"[^>]*y1="([0-9.]+)"/g)).map((m) => Number(m[1]));
+
+      expect(labelYs.length).toBeGreaterThanOrEqual(2);
+      expect(wireYs.length).toBe(5);
+
+      // The second BELL label should stay below the data wire area and near ancilla/boh.
+      const sortedLabelYs = [...labelYs].sort((a, b) => a - b);
+      expect(sortedLabelYs[1]).toBeGreaterThan(wireYs[1] + 8);
+      expect(sortedLabelYs[1]).toBeLessThan(wireYs[2] + 24);
+    });
+
+    it("serializes visually crossing multi-line macro expansions", () => {
+      const ast = parseCircuitDsl([
+        "qubits 5",
+        "alias q0 = control",
+        "alias q1 = data",
+        "alias q2 = ancilla",
+        "alias q3 = boh",
+        "alias q4 = app",
+        "GATE BELL(a, b) = H a; CNOT a b",
+        "BELL control ancilla",
+        "BELL data boh",
+        "H app",
+        "MEASURE control -> mc",
+        "MEASURE data -> md",
+        "X ancilla [mc]",
+        "Z ancilla [md]"
+      ].join("\n"));
+
+      const cnotPhases: number[] = [];
+      for (let phaseIndex = 0; phaseIndex < ast.phases.length; phaseIndex += 1) {
+        for (const op of ast.phases[phaseIndex]) {
+          if (op.type === "gate" && (op.name === "CNOT" || op.name === "CX")) {
+            cnotPhases.push(phaseIndex);
+          }
+        }
+      }
+
+      expect(cnotPhases.length).toBe(2);
+      expect(cnotPhases[0]).not.toBe(cnotPhases[1]);
+
+      const hPhases: number[] = [];
+      for (let phaseIndex = 0; phaseIndex < ast.phases.length; phaseIndex += 1) {
+        for (const op of ast.phases[phaseIndex]) {
+          if (op.type === "gate" && op.name === "H" && (op.targets[0] === 0 || op.targets[0] === 1)) {
+            hPhases.push(phaseIndex);
+          }
+        }
+      }
+      expect(hPhases.length).toBe(2);
+      expect(hPhases[0]).not.toBe(hPhases[1]);
     });
 
     it("renders classical pipes for conditioned gates", () => {

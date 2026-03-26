@@ -329,14 +329,30 @@ function opTargets(op: CircuitOp): number[] {
   return [op.target];
 }
 
+function opOccupiedQubits(op: CircuitOp): number[] {
+  const targets = opTargets(op);
+  if (targets.length <= 1) {
+    return targets;
+  }
+
+  const minQ = Math.min(...targets);
+  const maxQ = Math.max(...targets);
+  const occupied: number[] = [];
+  for (let q = minQ; q <= maxQ; q += 1) {
+    occupied.push(q);
+  }
+  return occupied;
+}
+
 function buildPhases(
-  parsedOps: Array<{ op: CircuitOp; line: number; explicitGroupId?: number }>
+  parsedOps: Array<{ op: CircuitOp; line: number; explicitGroupId?: number; occupiedQubits?: number[] }>
 ): Phase[] {
   const units: Array<{
     ops: CircuitOp[];
     opIndices: number[];
     forced: boolean;
     qubits: Set<number>;
+    occupiedQubits: Set<number>;
     conditionals: string[];
   }> = [];
 
@@ -351,6 +367,7 @@ function buildPhases(
         opIndices: [i],
         forced: false,
         qubits: new Set(opTargets(op)),
+        occupiedQubits: new Set(item.occupiedQubits ?? opOccupiedQubits(op)),
         conditionals
       });
       i += 1;
@@ -361,6 +378,7 @@ function buildPhases(
     const groupedOps: CircuitOp[] = [];
     const groupedIndices: number[] = [];
     const groupedQubits = new Set<number>();
+    const groupedOccupiedQubits = new Set<number>();
     const groupedConditionals = new Set<string>();
 
     while (i < parsedOps.length && parsedOps[i].explicitGroupId === groupId) {
@@ -369,6 +387,9 @@ function buildPhases(
       groupedIndices.push(i);
       for (const q of opTargets(grouped)) {
         groupedQubits.add(q);
+      }
+      for (const q of parsedOps[i].occupiedQubits ?? opOccupiedQubits(grouped)) {
+        groupedOccupiedQubits.add(q);
       }
       if (grouped.type === "gate" && grouped.conditional) {
         groupedConditionals.add(grouped.conditional);
@@ -381,12 +402,13 @@ function buildPhases(
       opIndices: groupedIndices,
       forced: true,
       qubits: groupedQubits,
+      occupiedQubits: groupedOccupiedQubits,
       conditionals: Array.from(groupedConditionals)
     });
   }
 
   const phases: Phase[] = [];
-  const phaseQubits: Array<Set<number>> = [];
+  const phaseOccupiedQubits: Array<Set<number>> = [];
   const phaseLocked: boolean[] = [];
   const opToPhase = new Map<number, number>();
   const measureProducerOp = new Map<string, number>();
@@ -414,10 +436,10 @@ function buildPhases(
         continue;
       }
 
-      const used = phaseQubits[phaseIndex];
+      const used = phaseOccupiedQubits[phaseIndex];
       let conflict = false;
 
-      for (const q of unit.qubits) {
+      for (const q of unit.occupiedQubits) {
         if (used.has(q)) {
           conflict = true;
           break;
@@ -449,7 +471,7 @@ function buildPhases(
 
     if (selectedPhase === phases.length) {
       phases.push([]);
-      phaseQubits.push(new Set<number>());
+      phaseOccupiedQubits.push(new Set<number>());
       phaseLocked.push(false);
     }
 
@@ -457,8 +479,10 @@ function buildPhases(
     for (const op of unit.ops) {
       phase.push(op);
     }
+    for (const q of unit.occupiedQubits) {
+      phaseOccupiedQubits[selectedPhase].add(q);
+    }
     for (const q of unit.qubits) {
-      phaseQubits[selectedPhase].add(q);
       qubitLastPhase.set(q, selectedPhase);
     }
     for (const opIdx of unit.opIndices) {
@@ -674,7 +698,7 @@ export function parseCircuitDsl(source: string): CircuitAst {
     aliasByName.set(alias.name, alias.index);
   }
 
-  const resolvedOps: Array<{ op: CircuitOp; line: number; explicitGroupId?: number }> = [];
+  const resolvedOps: Array<{ op: CircuitOp; line: number; explicitGroupId?: number; occupiedQubits?: number[] }> = [];
   const declaredClassicalBits = new Set<string>();
   const macroExpansions: Array<{ name: string; startOpIndex: number; endOpIndex: number }> = [];
   const macroStack: string[] = [];
@@ -683,7 +707,8 @@ export function parseCircuitDsl(source: string): CircuitAst {
     def: InternalGateDef,
     call: TempGate,
     callLine: number,
-    explicitGroupId?: number
+    explicitGroupId?: number,
+    inheritedOccupiedQubits?: number[]
   ): void => {
     if (!def.body) {
       return;
@@ -695,6 +720,19 @@ export function parseCircuitDsl(source: string): CircuitAst {
     const bindings = new Map<string, string>();
     for (let idx = 0; idx < def.params.length; idx += 1) {
       bindings.set(def.params[idx], call.targetRefs[idx]);
+    }
+
+    const resolvedCallTargets = call.targetRefs.map((ref) =>
+      resolveQubitRef(ref, aliasByName, resolvedQubits, callLine)
+    );
+    let macroOccupiedQubits: number[] | undefined = inheritedOccupiedQubits;
+    if (!macroOccupiedQubits && resolvedCallTargets.length > 1) {
+      const minQ = Math.min(...resolvedCallTargets);
+      const maxQ = Math.max(...resolvedCallTargets);
+      macroOccupiedQubits = [];
+      for (let q = minQ; q <= maxQ; q += 1) {
+        macroOccupiedQubits.push(q);
+      }
     }
 
     macroStack.push(def.name);
@@ -713,6 +751,7 @@ export function parseCircuitDsl(source: string): CircuitAst {
           resolvedOps.push({
             line: callLine,
             explicitGroupId,
+            occupiedQubits: macroOccupiedQubits,
             op: { type: "measure", target, classical: bodyOp.classical }
           });
           continue;
@@ -728,6 +767,7 @@ export function parseCircuitDsl(source: string): CircuitAst {
           resolvedOps.push({
             line: callLine,
             explicitGroupId,
+            occupiedQubits: macroOccupiedQubits,
             op: { type: "reset", target }
           });
           continue;
@@ -745,6 +785,7 @@ export function parseCircuitDsl(source: string): CircuitAst {
           resolvedOps.push({
             line: callLine,
             explicitGroupId,
+            occupiedQubits: macroOccupiedQubits,
             op: {
               type: "gate",
               name: bodyOp.name,
@@ -779,6 +820,7 @@ export function parseCircuitDsl(source: string): CircuitAst {
           resolvedOps.push({
             line: callLine,
             explicitGroupId,
+            occupiedQubits: macroOccupiedQubits,
             op: {
               type: "gate",
               name: nested.name,
@@ -790,7 +832,7 @@ export function parseCircuitDsl(source: string): CircuitAst {
             }
           });
         } else {
-          expandMacro(nested, nestedCall, callLine, explicitGroupId);
+          expandMacro(nested, nestedCall, callLine, explicitGroupId, macroOccupiedQubits);
         }
       }
     } finally {
