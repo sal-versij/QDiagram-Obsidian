@@ -33,7 +33,7 @@ Status markers:
 ## Phase D: Renderer Refactor (Moderate OOP)
 
 - [x] Extract layout/geometry service.
-- [x] Extract classical route builder service.
+- [x] Extract classical line routing service (measurement writes + control links).
 - [x] Extract gate rendering components under one dispatcher.
 - [x] Keep render facade and CSS class output stable.
 

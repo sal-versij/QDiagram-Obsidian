@@ -15,7 +15,7 @@ export function buildPhases(parsedOps: ScheduledOpInput[]): Phase[] {
     forced: boolean;
     qubits: Set<number>;
     occupiedQubits: Set<number>;
-    conditionals: string[];
+    conditionals: number[];
   }> = [];
 
   let i = 0;
@@ -23,7 +23,7 @@ export function buildPhases(parsedOps: ScheduledOpInput[]): Phase[] {
     const item = parsedOps[i];
     if (item.explicitGroupId === undefined) {
       const op = item.op;
-      const conditionals = op.type === "gate" && op.conditional ? [op.conditional] : [];
+      const conditionals = op.type === "gate" && op.conditionalBit !== undefined ? [op.conditionalBit] : [];
       units.push({
         ops: [op],
         opIndices: [i],
@@ -41,7 +41,7 @@ export function buildPhases(parsedOps: ScheduledOpInput[]): Phase[] {
     const groupedIndices: number[] = [];
     const groupedQubits = new Set<number>();
     const groupedOccupiedQubits = new Set<number>();
-    const groupedConditionals = new Set<string>();
+    const groupedConditionals = new Set<number>();
 
     while (i < parsedOps.length && parsedOps[i].explicitGroupId === groupId) {
       const grouped = parsedOps[i].op;
@@ -53,8 +53,8 @@ export function buildPhases(parsedOps: ScheduledOpInput[]): Phase[] {
       for (const q of parsedOps[i].occupiedQubits ?? opOccupiedQubits(grouped)) {
         groupedOccupiedQubits.add(q);
       }
-      if (grouped.type === "gate" && grouped.conditional) {
-        groupedConditionals.add(grouped.conditional);
+      if (grouped.type === "gate" && grouped.conditionalBit !== undefined) {
+        groupedConditionals.add(grouped.conditionalBit);
       }
       i += 1;
     }
@@ -73,13 +73,13 @@ export function buildPhases(parsedOps: ScheduledOpInput[]): Phase[] {
   const phaseOccupiedQubits: Array<Set<number>> = [];
   const phaseLocked: boolean[] = [];
   const opToPhase = new Map<number, number>();
-  const measureProducerOp = new Map<string, number>();
+  const measureProducerOp = new Map<number, number>();
   const qubitLastPhase = new Map<number, number>();
 
   for (let opIndex = 0; opIndex < parsedOps.length; opIndex += 1) {
     const op = parsedOps[opIndex].op;
-    if (op.type === "measure" && op.classical) {
-      measureProducerOp.set(op.classical, opIndex);
+    if (op.type === "measure") {
+      measureProducerOp.set(op.classicalTarget, opIndex);
     }
   }
 
@@ -92,9 +92,21 @@ export function buildPhases(parsedOps: ScheduledOpInput[]): Phase[] {
       }
     }
 
+    // Measurements must be in isolated phases (only themselves, no other ops)
+    const isMeasure = unit.ops.length === 1 && unit.ops[0].type === "measure";
+
     let selectedPhase = phases.length;
     for (let phaseIndex = minPhase; phaseIndex < phases.length; phaseIndex += 1) {
       if (phaseLocked[phaseIndex]) {
+        continue;
+      }
+
+      // Measurements can only occupy empty phases; no other ops allowed
+      if (isMeasure && phases[phaseIndex].length > 0) {
+        continue;
+      }
+      // Non-measurements cannot share a phase with any measurement
+      if (!isMeasure && phases[phaseIndex].some(op => op.type === "measure")) {
         continue;
       }
 

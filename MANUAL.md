@@ -20,6 +20,8 @@ Write one instruction per line.
 
 - Set qubit count:
   - `qubits 2`
+- Set classical bit count:
+  - `cbits 2`
 - Single-qubit gates:
   - `H 0`, `X 1`, `Y 0`, `Z 1`, `S 0`, `T 1`
   - Parametric gates: `RX(45) 0`, `RY(90) 1`, `RZ(180) 0`
@@ -62,7 +64,42 @@ Alias rules:
 - Alias names cannot collide with custom gate names you define with `GATE` or `CGATE`.
 - Alias indices must be in range for declared/inferred qubits.
 
-## 4) Parallel Operations
+## 4) Classical Bit Declarations and Aliases
+
+Classical lines are explicit and independent from qubit lines.
+
+```quantum
+qubits 2
+cbits 2
+MEASURE 0 -> c0
+X 1 [c0]
+```
+
+You can define classical aliases inline:
+
+```quantum
+qubits 2
+cbits 2: c0=flag, c1=done
+MEASURE 0 -> flag
+X 1 [flag]
+```
+
+Or as standalone aliases:
+
+```quantum
+alias c0 = readout
+qubits 1
+cbits 1
+MEASURE 0 -> readout
+```
+
+Classical alias rules:
+
+- Alias names must be unique in the classical namespace.
+- A classical alias name cannot be reused by a qubit alias name.
+- Alias indices must be in range for declared/inferred classical bits.
+
+## 5) Parallel Operations
 
 Independent operations are grouped automatically.
 
@@ -87,7 +124,7 @@ qubits 3
 { H 0; X 1; Y 2 }
 ```
 
-## 5) Custom Gates
+## 6) Custom Gates
 
 ### Blackbox gate
 
@@ -121,12 +158,13 @@ BELL 0 1
 
 Expanded macros are shown with a rounded container label above the affected phases.
 
-## 6) Classical Conditions
+## 7) Classical Conditions
 
 Condition gates on a measurement result:
 
 ```quantum
 qubits 2
+cbits 1
 H 0
 M 0 -> c0
 X 1 [c0]
@@ -134,9 +172,22 @@ X 1 [c0]
 
 You can reuse the same classical bit for multiple gates.
 
-Important rule: conditioned gates cannot forward-reference classical bits. The bit in `[c0]` must be declared earlier by `MEASURE` or `M`.
+Condition references can use either `cN` form or a classical alias:
 
-## 7) Complete Example
+- `X 1 [c0]`
+- `X 1 [flag]`
+
+If `cbits` is declared, conditioned gates can reference any declared classical line; measurement later writes the value used by those controls.
+
+## 8) Classical Rendering Semantics
+
+The renderer now uses explicit classical lines (one per declared/inferred classical bit):
+
+- Every `MEASURE q -> cX` draws a write connector from the measurement gate to classical line `cX`.
+- Every conditioned gate `... [cX]` draws a classical control marker from line `cX` down/up to the gate, in CNOT-like control style.
+- Legacy "pipe from measurement directly to gate" routing is replaced by this persistent classical-line model.
+
+## 9) Complete Example
 
 ```quantum
 alias q0 = control
@@ -146,6 +197,7 @@ alias q2 = ancilla
 GATE BELL(a, b) = H a; CNOT a b
 
 qubits 3
+cbits 2: c0=mc, c1=md
 
 BELL control data
 H ancilla
@@ -157,7 +209,7 @@ X ancilla [mc]
 Z ancilla [md]
 ```
 
-## 8) Tips
+## 10) Tips
 
 - Start with a small circuit and grow it step by step.
 - Use aliases for readability.

@@ -6,14 +6,22 @@ export type AliasDecl = {
   name: string;
 };
 
+export type ClassicalAliasDecl = {
+  line: number;
+  index: number;
+  name: string;
+};
+
 type TempOpLike =
   | {
       kind: "gate";
       targetRefs: string[];
+      conditionalRef?: string;
     }
   | {
       kind: "measure";
       targetRef: string;
+      classicalTargetRef: string;
     }
   | {
       kind: "reset";
@@ -90,4 +98,64 @@ export function resolveQubitsAndAliases(params: {
   }
 
   return { resolvedQubits, aliasByIndex, aliasByName };
+}
+
+export function resolveClassicalBitsAndAliases(params: {
+  classicalBits?: number;
+  parsedItems: ParsedItemLike[];
+  aliasDecls: ClassicalAliasDecl[];
+  qubitAliasByName: Map<string, number>;
+}): {
+  resolvedClassicalBits: number;
+  aliasByIndex: Map<number, string>;
+  aliasByName: Map<string, number>;
+} {
+  const { classicalBits, parsedItems, aliasDecls, qubitAliasByName } = params;
+
+  const resolvedClassicalBits =
+    classicalBits ??
+    (() => {
+      let maxRef = -1;
+      for (const item of parsedItems) {
+        const refs: string[] = [];
+        if (item.op.kind === "gate" && item.op.conditionalRef) {
+          refs.push(item.op.conditionalRef);
+        }
+        if (item.op.kind === "measure") {
+          refs.push(item.op.classicalTargetRef);
+        }
+
+        for (const ref of refs) {
+          const numeric = ref.match(/^c(\d+)$/i) || ref.match(/^(\d+)$/);
+          if (numeric) {
+            const value = parsePositiveInt(numeric[1], item.line, "classical bit index");
+            maxRef = Math.max(maxRef, value);
+          }
+        }
+      }
+      return Math.max(1, maxRef + 1);
+    })();
+
+  const aliasByIndex = new Map<number, string>();
+  const aliasByName = new Map<string, number>();
+  for (const alias of aliasDecls) {
+    if (alias.index >= resolvedClassicalBits) {
+      throw new Error(
+        `Line ${alias.line}: alias c${alias.index} exceeds declared ${resolvedClassicalBits} classical bits.`
+      );
+    }
+    if (aliasByIndex.has(alias.index)) {
+      throw new Error(`Line ${alias.line}: duplicate alias for c${alias.index}.`);
+    }
+    if (aliasByName.has(alias.name)) {
+      throw new Error(`Line ${alias.line}: duplicate classical alias name '${alias.name}'.`);
+    }
+    if (qubitAliasByName.has(alias.name)) {
+      throw new Error(`Line ${alias.line}: alias name '${alias.name}' already used by a qubit alias.`);
+    }
+    aliasByIndex.set(alias.index, alias.name);
+    aliasByName.set(alias.name, alias.index);
+  }
+
+  return { resolvedClassicalBits, aliasByIndex, aliasByName };
 }

@@ -89,8 +89,13 @@ function renderMacroContainer(
 }
 
 export function renderCircuitSvg(ast: CircuitAst): string {
-  const labels = Array.from({ length: ast.qubits }, (_, q) => ast.qubitAliases?.get(q) ?? `q${q}`);
-  const longestLabel = labels.reduce((max, label) => Math.max(max, label.length), 2);
+  const qubitLabels = Array.from({ length: ast.qubits }, (_, q) => ast.qubitAliases?.get(q) ?? `q${q}`);
+  const classicalLabels = Array.from(
+    { length: ast.classicalBits },
+    (_, c) => ast.classicalAliases?.get(c) ?? `c${c}`
+  );
+  const allLabels = [...qubitLabels, ...classicalLabels];
+  const longestLabel = allLabels.reduce((max, label) => Math.max(max, label.length), 2);
   const labelAreaWidth = Math.max(32, estimateTextWidth("W".repeat(longestLabel), 11) + 16);
 
   const opToPhase = new Map<CircuitOp, number>();
@@ -143,10 +148,13 @@ export function renderCircuitSvg(ast: CircuitAst): string {
     leftPadding: Math.max(DEFAULT_LAYOUT.leftPadding, labelAreaWidth + 20),
     topPadding: macroLaneCount > 0 ? DEFAULT_LAYOUT.topPadding + macroLaneCount * 10 + 4 : DEFAULT_LAYOUT.topPadding
   };
+  const classicalStartY = layout.topPadding + ast.qubits * layout.rowGap;
+  const classicalWireY = (bit: number): number => classicalStartY + bit * layout.rowGap;
   const width = layout.leftPadding + (ast.phases.length + 2) * layout.colGap;
-  const height = layout.topPadding * 2 + (ast.qubits - 1) * layout.rowGap;
+  const totalRows = ast.qubits + ast.classicalBits;
+  const height = layout.topPadding * 2 + (Math.max(1, totalRows) - 1) * layout.rowGap;
 
-  const { pipeEls, firstMeasureXByQubit } = collectClassicalRouting(ast, layout);
+  const { overlayEls, firstMeasureXByQubit } = collectClassicalRouting(ast, layout, classicalWireY);
 
   const wireEls: string[] = [];
   const labelEls: string[] = [];
@@ -158,10 +166,20 @@ export function renderCircuitSvg(ast: CircuitAst): string {
     wireEls.push(`<line class="quantum-wire" x1="${wireStartX}" y1="${y}" x2="${wireEndX}" y2="${y}" stroke="var(--text-muted)" />`);
 
     // Use alias if available, otherwise use qN
-    let label = `q${q}`;
-    if (ast.qubitAliases && ast.qubitAliases.has(q)) {
-      label = ast.qubitAliases.get(q) || label;
-    }
+    const label = qubitLabels[q];
+    const textWidth = estimateTextWidth(label, 11);
+    const textX = wireStartX - 10;
+    const bgX = textX - textWidth - 4;
+    labelEls.push(`<rect class="quantum-wire-label-bg" x="${bgX}" y="${y - 9}" width="${textWidth + 8}" height="16" fill="var(--background-primary)" />`);
+    labelEls.push(`<text class="quantum-wire-label" x="${textX}" y="${y + 4}" text-anchor="end" font-size="11" fill="var(--text-muted)">${esc(label)}</text>`);
+  }
+
+  for (let c = 0; c < ast.classicalBits; c += 1) {
+    const y = classicalWireY(c);
+    const wireEndX = width - 20;
+    wireEls.push(`<line class="quantum-classical-wire" x1="${wireStartX}" y1="${y}" x2="${wireEndX}" y2="${y}" stroke="var(--text-muted)" stroke-dasharray="6 4" />`);
+
+    const label = classicalLabels[c];
     const textWidth = estimateTextWidth(label, 11);
     const textX = wireStartX - 10;
     const bgX = textX - textWidth - 4;
@@ -186,11 +204,11 @@ export function renderCircuitSvg(ast: CircuitAst): string {
   const macroLabelEls = macroRendered.map((item) => item.label);
 
   return [
-    `<svg class="quantum-circuit-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="Quantum circuit with ${ast.qubits} qubits and ${ast.phases.length} phases">`,
+    `<svg class="quantum-circuit-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="Quantum circuit with ${ast.qubits} qubits, ${ast.classicalBits} classical bits and ${ast.phases.length} phases">`,
     ...wireEls,
     ...labelEls,
     ...macroBoxEls,
-    ...pipeEls,
+    ...overlayEls,
     ...opEls,
     ...macroLabelBgEls,
     ...macroLabelEls,

@@ -39,13 +39,14 @@ When changing parser behavior, preserve these existing rules unless the task exp
 
 - Comments begin with `#` and are ignored inline.
 - `qubits N` can include inline aliases, e.g. `qubits 3: q0=a, q1=b, q2=c`.
-- Standalone aliases use `alias q0 = name` syntax.
+- `cbits N` can include inline aliases, e.g. `cbits 2: c0=flag, c1=done`.
+- Standalone aliases use `alias q0 = name` and `alias c0 = name` syntax.
 - Built-ins include single-qubit (`H X Y Z S T RX RY RZ`), two-qubit (`CNOT CX CZ SWAP`), and three-qubit (`TOFFOLI CCX`) gates.
 - Explicit grouping:
   - comma-separated ops force same phase: `H 0, X 1`
   - braced blocks force same phase: `{ H 0; CNOT 0 1; X 2 }`
 - Unknown gate calls are resolved against custom definitions (`GATE`/`CGATE`) before failing.
-- Classical conditions (`[c0]`) require prior measurement declaration (`MEASURE ... -> c0`) and cannot forward-reference.
+- Classical conditions (`[c0]` or `[flag]`) resolve against declared/inferred classical bits.
 - Alias names cannot collide with built-in/custom gate names.
 - Macro definitions (`GATE NAME(...) = ...`) expand into concrete ops and track `macroExpansions` spans.
 - Recursive macro expansion must throw.
@@ -65,7 +66,7 @@ When changing parser behavior, preserve these existing rules unless the task exp
   - `SWAP` uses crossed X markers.
   - controlled custom gates use control-dot + labeled target box.
   - blackbox/multi-target custom gates render as labeled rounded rectangles.
-- Classical condition routing uses `quantum-classical-pipe` paths from measurement outputs to conditioned gates.
+- Classical condition routing uses explicit classical lines plus control links from bit lines to conditioned gates.
 - Wires terminate at first measurement on each qubit (do not extend full width past measured endpoint).
 - Macro containers (`quantum-macro-container` and related label classes) use lane assignment to avoid overlap.
 
@@ -78,7 +79,7 @@ When touching parser/renderer behavior, update or add tests in `src/main.test.ts
 - conditional gate validation and scheduling
 - custom gate/CGATE parsing
 - macro expansion and recursion checks
-- renderer output for custom gates, macro containers, classical pipes, and measurement wire cutoff
+- renderer output for custom gates, macro containers, classical line controls/writes, and measurement wire cutoff
 
 ## Build Artifacts
 

@@ -3,7 +3,7 @@ export type GateOp = {
   name: string;
   targets: number[];
   params?: string[];
-  conditional?: string;
+  conditionalBit?: number;
   isCustom?: boolean;
   isControlledCustom?: boolean;
 };
@@ -11,7 +11,7 @@ export type GateOp = {
 export type MeasureOp = {
   type: "measure";
   target: number;
-  classical?: string;
+  classicalTarget: number;
 };
 
 export type ResetOp = {
@@ -40,7 +40,9 @@ export type MacroExpansion = {
 
 export type CircuitAst = {
   qubits: number;
+  classicalBits: number;
   qubitAliases?: Map<number, string>;
+  classicalAliases?: Map<number, string>;
   gateDefs?: Map<string, GateDef>;
   macroExpansions?: MacroExpansion[];
   phases: Phase[];

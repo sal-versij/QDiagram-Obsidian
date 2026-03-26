@@ -20,7 +20,7 @@ This document describes the current runtime sequence, module responsibilities, a
   - Parser facade and orchestration.
 - src/parser/
   - Tokenization of DSL.
-  - Declarations parsing: qubits, alias, GATE, CGATE.
+  - Declarations parsing: qubits/cbits, aliases, GATE, CGATE.
   - Macro expansion and recursion guard.
   - Phase scheduling and explicit group locking.
   - Parser error formatting helpers.
@@ -29,7 +29,7 @@ This document describes the current runtime sequence, module responsibilities, a
 - src/renderer/
   - Layout geometry (wire/phase coordinates, sizing).
   - Per-op SVG rendering dispatcher and handlers.
-  - Classical route rendering for conditioned gates.
+  - Classical line routing for measurement writes and conditioned-gate control links.
   - Macro expansion container overlays and lane assignment.
 - src/shared/types.ts
   - Shared contracts for CircuitAst, CircuitOp, GateOp, Phase, MacroExpansion.
@@ -44,7 +44,9 @@ This document describes the current runtime sequence, module responsibilities, a
 4. Resolved operations -> phased schedule.
 5. Final AST fields:
   - qubits
+  - classicalBits
   - qubitAliases
+  - classicalAliases
   - gateDefs
   - macroExpansions
   - phases
@@ -53,7 +55,8 @@ This document describes the current runtime sequence, module responsibilities, a
 
 ## Key Invariants
 
-- Conditional gate references require an already declared classical bit.
+- Conditional gate references resolve to declared/inferred classical bit indices.
+- Measurement operations must write into an explicit classical bit target.
 - Alias names cannot conflict with built-in or custom gate names.
 - Explicit operation groups stay in one phase and lock that phase from later implicit merges.
 - Wires end at the first measurement on each qubit.
@@ -65,8 +68,11 @@ This document describes the current runtime sequence, module responsibilities, a
 - Public renderer entry: renderCircuitSvg(ast) in src/renderer/index.ts.
 - Existing SVG class names consumed by tests and styles:
   - quantum-custom-gate
-  - quantum-classical-pipe
-  - quantum-classical-pipe-inner
+  - quantum-classical-wire
+  - quantum-classical-write
+  - quantum-classical-write-head
+  - quantum-classical-control-link
+  - quantum-classical-control-dot
   - quantum-macro-container
   - quantum-macro-container-label
   - quantum-macro-container-label-bg

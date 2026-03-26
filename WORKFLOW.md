@@ -69,5 +69,5 @@ Run all:
 Then manually verify at least one circuit with:
 - alias labels
 - macro expansion container
-- classical condition pipe
+- classical bit lines and write/control links
 - measurement wire cutoff

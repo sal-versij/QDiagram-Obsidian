@@ -19,13 +19,23 @@ H 0 # put q0 in superposition
   - qubits 3: q0=a, q1=b, q2=c
 - If qubits is omitted, parser infers a minimum count from numeric/qN references.
 
+## Classical Bit Declaration
+
+- Declare classical bit count:
+  - cbits N
+- Inline aliases are supported on the same line:
+  - cbits 2: c0=flag, c1=done
+- If cbits is omitted, parser infers a minimum count from classical references (`cN`) used by measurement targets and conditions.
+
 ## Alias Declaration
 
 - Standalone alias syntax:
   - alias q0 = control
+  - alias c0 = flag
 - Alias constraints:
-  - index must be in range of declared/inferred qubits.
-  - alias name must be unique.
+  - index must be in range of declared/inferred qubits or classical bits.
+  - alias name must be unique within its namespace.
+  - a classical alias name cannot be reused as a qubit alias name.
   - alias name must not collide with built-in or custom gate names.
 
 ## Built-in Gates
@@ -50,7 +60,7 @@ Examples:
 - Measurement:
   - MEASURE target -> c0
   - M target -> c0
-- Classical bit name after -> is optional.
+- Classical target after -> is required.
 - Reset:
   - RESET target
 
@@ -58,9 +68,9 @@ Examples:
 
 - Gate conditions use a trailing classical selector:
   - X 1 [c0]
+  - X 1 [flag]
 - Rules:
-  - c0 must be declared earlier by MEASURE/M.
-  - forward references are rejected.
+  - selector must resolve to a declared/inferred classical bit.
   - one classical bit can condition multiple gates.
 
 ## Explicit Grouping
@@ -99,6 +109,7 @@ Rules:
 ### Bell Pair
 
 qubits 2
+cbits 2
 H 0
 CNOT 0 1
 MEASURE 0 -> c0
@@ -108,13 +119,16 @@ MEASURE 1 -> c1
 
 alias q0 = control
 alias q1 = target
+alias c0 = flag
 qubits 2
+cbits 1
 H control
-M control -> c0
-X target [c0]
+M control -> flag
+X target [flag]
 
 ### Custom Controlled Gate
 
 CGATE DRIVE(control, target)
 qubits 2
+cbits 1
 DRIVE 0 1

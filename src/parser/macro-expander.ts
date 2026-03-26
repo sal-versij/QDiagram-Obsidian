@@ -7,13 +7,13 @@ export type MacroBodyGateOp = {
   name: string;
   params: string[];
   targetRefs: string[];
-  conditional?: string;
+  conditionalRef?: string;
 };
 
 export type MacroBodyMeasureOp = {
   kind: "measure";
   targetRef: string;
-  classical?: string;
+  classicalTargetRef: string;
 };
 
 export type MacroBodyResetOp = {
@@ -35,7 +35,7 @@ export type MacroCallGate = {
   name: string;
   params: string[];
   targetRefs: string[];
-  conditional?: string;
+  conditionalRef?: string;
 };
 
 export type ResolvedOpRecord = {
@@ -58,11 +58,13 @@ export function expandMacroCall(args: {
   inheritedOccupiedQubits?: number[];
   gateDecls: Map<string, MacroGateDef>;
   aliasByName: Map<string, number>;
+  classicalAliasByName: Map<string, number>;
   resolvedQubits: number;
-  declaredClassicalBits: Set<string>;
+  resolvedClassicalBits: number;
   resolvedOps: ResolvedOpRecord[];
   macroStack: string[];
   resolveQubitRef: (ref: string, aliasesByName: Map<string, number>, qubits: number, line: number) => number;
+  resolveClassicalRef: (ref: string, aliasesByName: Map<string, number>, bits: number, line: number) => number;
 }): void {
   const {
     def,
@@ -72,11 +74,13 @@ export function expandMacroCall(args: {
     inheritedOccupiedQubits,
     gateDecls,
     aliasByName,
+    classicalAliasByName,
     resolvedQubits,
-    declaredClassicalBits,
+    resolvedClassicalBits,
     resolvedOps,
     macroStack,
-    resolveQubitRef
+    resolveQubitRef,
+    resolveClassicalRef
   } = args;
 
   if (!def.body) {
@@ -114,14 +118,17 @@ export function expandMacroCall(args: {
           resolvedQubits,
           callLine
         );
-        if (bodyOp.classical) {
-          declaredClassicalBits.add(bodyOp.classical);
-        }
+        const classicalTarget = resolveClassicalRef(
+          substituteRef(bodyOp.classicalTargetRef, bindings),
+          classicalAliasByName,
+          resolvedClassicalBits,
+          callLine
+        );
         resolvedOps.push({
           line: callLine,
           explicitGroupId,
           occupiedQubits: macroOccupiedQubits,
-          op: { type: "measure", target, classical: bodyOp.classical }
+          op: { type: "measure", target, classicalTarget }
         });
         continue;
       }
@@ -145,10 +152,10 @@ export function expandMacroCall(args: {
       const expandedTargets = bodyOp.targetRefs.map((ref) =>
         resolveQubitRef(substituteRef(ref, bindings), aliasByName, resolvedQubits, callLine)
       );
-      const effectiveConditional = bodyOp.conditional ?? call.conditional;
-      if (effectiveConditional && !declaredClassicalBits.has(effectiveConditional)) {
-        throw new Error(`Line ${callLine}: classical bit '${effectiveConditional}' not declared.`);
-      }
+      const effectiveConditionalRef = bodyOp.conditionalRef ?? call.conditionalRef;
+      const conditionalBit = effectiveConditionalRef
+        ? resolveClassicalRef(effectiveConditionalRef, classicalAliasByName, resolvedClassicalBits, callLine)
+        : undefined;
 
       if (BUILTIN_GATES.has(bodyOp.name)) {
         resolvedOps.push({
@@ -160,7 +167,7 @@ export function expandMacroCall(args: {
             name: bodyOp.name,
             targets: expandedTargets,
             params: bodyOp.params,
-            conditional: effectiveConditional
+            conditionalBit
           }
         });
         continue;
@@ -181,7 +188,7 @@ export function expandMacroCall(args: {
         name: nested.name,
         params: bodyOp.params,
         targetRefs: bodyOp.targetRefs.map((ref) => substituteRef(ref, bindings)),
-        conditional: effectiveConditional
+        conditionalRef: effectiveConditionalRef
       };
 
       if (nested.type === "blackbox" || nested.type === "cgate") {
@@ -196,7 +203,7 @@ export function expandMacroCall(args: {
               resolveQubitRef(ref, aliasByName, resolvedQubits, callLine)
             ),
             params: nestedCall.params,
-            conditional: nestedCall.conditional,
+            conditionalBit,
             isCustom: true,
             isControlledCustom: nested.type === "cgate"
           }
@@ -210,11 +217,13 @@ export function expandMacroCall(args: {
           inheritedOccupiedQubits: macroOccupiedQubits,
           gateDecls,
           aliasByName,
+          classicalAliasByName,
           resolvedQubits,
-          declaredClassicalBits,
+          resolvedClassicalBits,
           resolvedOps,
           macroStack,
-          resolveQubitRef
+          resolveQubitRef,
+          resolveClassicalRef
         });
       }
     }
