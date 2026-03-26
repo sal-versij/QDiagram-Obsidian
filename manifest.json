@@ -1,0 +1,10 @@
+{
+  "id": "qdiagram",
+  "name": "QDiagram",
+  "version": "0.1.0",
+  "minAppVersion": "1.5.0",
+  "description": "QDiagram renders quantum circuit diagrams from markdown code blocks.",
+  "author": "",
+  "authorUrl": "",
+  "isDesktopOnly": false
+}

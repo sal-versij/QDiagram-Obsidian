@@ -1,0 +1,20 @@
+.quantum-circuit-container {
+  margin: 0.75rem 0;
+  overflow-x: auto;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  padding: 0.75rem;
+  background: var(--background-secondary);
+}
+
+.quantum-circuit-error {
+  color: var(--text-error);
+  border-left: 3px solid var(--text-error);
+  padding-left: 0.5rem;
+}
+
+.quantum-circuit-svg {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}

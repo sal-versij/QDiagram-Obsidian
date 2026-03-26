@@ -1,0 +1,27 @@
+{
+  "name": "qdiagram",
+  "version": "0.1.0",
+  "description": "QDiagram: Obsidian plugin to render quantum circuits from markdown code blocks",
+  "main": "output/main.js",
+  "scripts": {
+    "dev": "node esbuild.config.mjs --watch",
+    "build": "node esbuild.config.mjs",
+    "test": "vitest run",
+    "lint": "eslint . --ext .ts"
+  },
+  "keywords": [
+    "obsidian",
+    "plugin",
+    "quantum",
+    "circuit"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^22.15.24",
+    "esbuild": "^0.25.5",
+    "obsidian": "latest",
+    "typescript": "^5.8.3",
+    "vitest": "^2.1.8"
+  }
+}
