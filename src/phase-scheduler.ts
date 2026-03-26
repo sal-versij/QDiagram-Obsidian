@@ -1,4 +1,5 @@
 import { CircuitOp, Phase } from "./types";
+import { opOccupiedQubits, opTargets } from "./op-utils";
 
 export type ScheduledOpInput = {
   op: CircuitOp;
@@ -6,28 +7,6 @@ export type ScheduledOpInput = {
   explicitGroupId?: number;
   occupiedQubits?: number[];
 };
-
-function opTargets(op: CircuitOp): number[] {
-  if (op.type === "gate") {
-    return op.targets;
-  }
-  return [op.target];
-}
-
-function opOccupiedQubits(op: CircuitOp): number[] {
-  const targets = opTargets(op);
-  if (targets.length <= 1) {
-    return targets;
-  }
-
-  const minQ = Math.min(...targets);
-  const maxQ = Math.max(...targets);
-  const occupied: number[] = [];
-  for (let q = minQ; q <= maxQ; q += 1) {
-    occupied.push(q);
-  }
-  return occupied;
-}
 
 export function buildPhases(parsedOps: ScheduledOpInput[]): Phase[] {
   const units: Array<{

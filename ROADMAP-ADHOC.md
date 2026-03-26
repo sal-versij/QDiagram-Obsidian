@@ -33,13 +33,13 @@ Status markers:
 
 - [x] Extract layout/geometry service.
 - [x] Extract classical route builder service.
-- [ ] Extract gate rendering components under one dispatcher.
-- [ ] Keep render facade and CSS class output stable.
+- [x] Extract gate rendering components under one dispatcher.
+- [x] Keep render facade and CSS class output stable.
 
 ## Phase E: Generalization and Extendability
 
 - [x] Introduce centralized gate metadata registry.
-- [ ] Unify target-span/occupied-qubit helpers across parser and renderer.
+- [x] Unify target-span/occupied-qubit helpers across parser and renderer.
 - [ ] Define low-friction extension points for new gate types.
 - [ ] Remove abstractions that do not reduce coupling or duplication.
 
