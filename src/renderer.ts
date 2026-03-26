@@ -30,8 +30,8 @@ function wireY(index: number, layout: Layout): number {
   return layout.topPadding + index * layout.rowGap;
 }
 
-function opX(index: number, layout: Layout): number {
-  return layout.leftPadding + (index + 1) * layout.colGap;
+function phaseX(phaseIndex: number, layout: Layout): number {
+  return layout.leftPadding + (phaseIndex + 1) * layout.colGap;
 }
 
 function renderSingleGate(op: GateOp, x: number, y: number, layout: Layout): string {
@@ -83,6 +83,24 @@ function renderSwap(op: GateOp, x: number, layout: Layout): string {
   ].join("");
 }
 
+function renderCustomGate(op: GateOp, x: number, layout: Layout): string {
+  if (op.targets.length === 1) {
+    return renderSingleGate(op, x, wireY(op.targets[0], layout), layout);
+  }
+
+  const minTarget = Math.min(...op.targets);
+  const maxTarget = Math.max(...op.targets);
+  const topY = wireY(minTarget, layout) - layout.gateHeight / 2;
+  const bottomY = wireY(maxTarget, layout) + layout.gateHeight / 2;
+  const rectX = x - layout.gateWidth / 2;
+  const height = bottomY - topY;
+
+  return [
+    `<rect x="${rectX}" y="${topY}" width="${layout.gateWidth}" height="${height}" rx="5" ry="5" fill="var(--background-primary)" stroke="var(--text-normal)" />`,
+    `<text x="${x}" y="${(topY + bottomY) / 2 + 4}" text-anchor="middle" font-size="11" fill="var(--text-normal)">${esc(op.name)}</text>`
+  ].join("");
+}
+
 function renderMeasure(target: number, x: number, layout: Layout): string {
   const y = wireY(target, layout);
   const rectX = x - 14;
@@ -105,14 +123,38 @@ function renderReset(target: number, x: number, layout: Layout): string {
   ].join("");
 }
 
-function renderOp(op: CircuitOp, opIndex: number, layout: Layout): string {
-  const x = opX(opIndex, layout);
+function renderClassicalPipe(
+  fromPhaseIndex: number,
+  toPhaseIndex: number,
+  classicalBitIndex: number,
+  layout: Layout
+): string {
+  const x1 = phaseX(fromPhaseIndex, layout);
+  const x2 = phaseX(toPhaseIndex, layout);
+  const y = wireY(classicalBitIndex, layout) + layout.rowGap / 2 + 8; // below the qubit wires
+
+  // Two parallel dashed lines for classical bit pipe
+  const offset = 3;
+  return [
+    `<line x1="${x1}" y1="${y - offset}" x2="${x2}" y2="${y - offset}" stroke="var(--text-muted)" stroke-dasharray="4,2" stroke-width="1.5" />`,
+    `<line x1="${x1}" y1="${y + offset}" x2="${x2}" y2="${y + offset}" stroke="var(--text-muted)" stroke-dasharray="4,2" stroke-width="1.5" />`
+  ].join("");
+}
+
+function renderOp(op: CircuitOp, phaseX: number, phaseOpsCount: number, opIndexInPhase: number, layout: Layout): string {
+  // Calculate vertical offset for ops within the phase
+  const opOffset = (opIndexInPhase - (phaseOpsCount - 1) / 2) * 8;
+  const x = phaseX + opOffset;
 
   if (op.type === "measure") {
     return renderMeasure(op.target, x, layout);
   }
   if (op.type === "reset") {
     return renderReset(op.target, x, layout);
+  }
+
+  if (op.isCustom) {
+    return renderCustomGate(op, x, layout);
   }
 
   if (op.targets.length === 1) {
@@ -155,21 +197,68 @@ function renderOp(op: CircuitOp, opIndex: number, layout: Layout): string {
 
 export function renderCircuitSvg(ast: CircuitAst): string {
   const layout = DEFAULT_LAYOUT;
-  const width = layout.leftPadding + (ast.ops.length + 2) * layout.colGap;
+  const width = layout.leftPadding + (ast.phases.length + 2) * layout.colGap;
   const height = layout.topPadding * 2 + (ast.qubits - 1) * layout.rowGap;
+
+  // Build map of classical bit names to their operation sequence index and measurement phase
+  const classicalBitMap = new Map<string, { opIndex: number; phaseIndex: number; target: number }>();
+  let flatOpIndex = 0;
+  for (let phaseIdx = 0; phaseIdx < ast.phases.length; phaseIdx += 1) {
+    const phase = ast.phases[phaseIdx];
+    for (let opInPhase = 0; opInPhase < phase.length; opInPhase += 1) {
+      const op = phase[opInPhase];
+      if (op.type === "measure" && op.classical) {
+        classicalBitMap.set(op.classical, { opIndex: flatOpIndex, phaseIndex: phaseIdx, target: op.target });
+      }
+      flatOpIndex += 1;
+    }
+  }
 
   const wireEls: string[] = [];
   for (let q = 0; q < ast.qubits; q += 1) {
     const y = wireY(q, layout);
     wireEls.push(`<line x1="20" y1="${y}" x2="${width - 20}" y2="${y}" stroke="var(--text-muted)" />`);
-    wireEls.push(`<text x="8" y="${y + 4}" font-size="11" fill="var(--text-muted)">q${q}</text>`);
+
+    // Use alias if available, otherwise use qN
+    let label = `q${q}`;
+    if (ast.qubitAliases && ast.qubitAliases.has(q)) {
+      label = ast.qubitAliases.get(q) || label;
+    }
+    wireEls.push(`<text x="8" y="${y + 4}" font-size="11" fill="var(--text-muted)">${esc(label)}</text>`);
   }
 
-  const opEls = ast.ops.map((op, i) => renderOp(op, i, layout));
+  // Collect classical pipes for rendering before gates
+  const pipeEls: string[] = [];
+  flatOpIndex = 0;
+  for (let phaseIdx = 0; phaseIdx < ast.phases.length; phaseIdx += 1) {
+    const phase = ast.phases[phaseIdx];
+    for (let opInPhase = 0; opInPhase < phase.length; opInPhase += 1) {
+      const op = phase[opInPhase];
+      if (op.type === "gate" && op.conditional) {
+        const measureInfo = classicalBitMap.get(op.conditional);
+        if (measureInfo) {
+          pipeEls.push(renderClassicalPipe(measureInfo.phaseIndex, phaseIdx, measureInfo.target, layout));
+        }
+      }
+      flatOpIndex += 1;
+    }
+  }
+
+  // Render operations grouped by phase
+  const opEls: string[] = [];
+  for (let phaseIdx = 0; phaseIdx < ast.phases.length; phaseIdx += 1) {
+    const phase = ast.phases[phaseIdx];
+    const phaseCenterX = phaseX(phaseIdx, layout);
+    for (let opInPhase = 0; opInPhase < phase.length; opInPhase += 1) {
+      const op = phase[opInPhase];
+      opEls.push(renderOp(op, phaseCenterX, phase.length, opInPhase, layout));
+    }
+  }
 
   return [
-    `<svg class="quantum-circuit-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="Quantum circuit with ${ast.qubits} qubits and ${ast.ops.length} operations">`,
+    `<svg class="quantum-circuit-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="Quantum circuit with ${ast.qubits} qubits and ${ast.phases.length} phases">`,
     ...wireEls,
+    ...pipeEls,
     ...opEls,
     "</svg>"
   ].join("");

@@ -18,7 +18,16 @@ export default class QDiagramPlugin extends Plugin {
 
     try {
       const ast = parseCircuitDsl(source);
-      container.innerHTML = renderCircuitSvg(ast);
+      const svgMarkup = renderCircuitSvg(ast);
+      const parser = new DOMParser();
+      const svgDoc = parser.parseFromString(svgMarkup, "image/svg+xml");
+      const svgEl = svgDoc.documentElement;
+
+      if (svgEl.tagName.toLowerCase() !== "svg") {
+        throw new Error("Failed to render SVG output.");
+      }
+
+      container.appendChild(document.importNode(svgEl, true));
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown parse/render error";
       container.createDiv({

@@ -22,3 +22,5 @@ coverage/
 .env
 .env.*
 !.env.example
+*lock.yml
+*lock.json

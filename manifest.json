@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "minAppVersion": "1.5.0",
   "description": "QDiagram renders quantum circuit diagrams from markdown code blocks.",
-  "author": "",
-  "authorUrl": "",
+  "author": "sal-versij",
+  "authorUrl": "https://github.com/sal-versij",
   "isDesktopOnly": false
 }
